@@ -1,5 +1,12 @@
 # Google Apps Script
 .clasp.json
+.clasprc.json
+src/00_Config.gs
+src/00_Config.js
+src/About.js
+src/Notion_Admin.js
+src/Debug.js
+private-src/
 
 # Environment variables
 .env

@@ -84,20 +84,23 @@ flowchart LR
 5. Document workflows retrieve templates from Google Drive and generate completed files.
 6. The bot updates the interactive Slack message with the result or next action.
 
-## Planned Repository Structure
+## Repository Structure
 
 ```text
 google-apps-script-slack-bot/
 ├── README.md
 ├── .gitignore
-├── LICENSE
-├── src/          # Sanitized Google Apps Script source files
-├── docs/         # Architecture and setup documentation
-├── images/       # Anonymized screenshots and diagrams
-└── examples/     # Safe configuration and workflow examples
+├── examples/
+│   └── 00_Config.example.js
+└── src/
+    ├── appsscript.json
+    └── *.js
 ```
 
-The application currently runs from the Google Apps Script environment. Source files will be added after company-specific identifiers and configuration values have been replaced with safe placeholders.
+- `src/` contains the sanitized public Google Apps Script source.
+- `examples/00_Config.example.js` documents the required environment-specific configuration.
+- Production IDs, credentials, company information, and internal debugging helpers are excluded from version control.
+- The private production mirror used by clasp remains local and is not part of the public repository.
 
 ## Screenshots
 
@@ -114,18 +117,22 @@ No company, contractor, client, or financial information will be published.
 
 ## Installation
 
-Public installation instructions will be added alongside the sanitized source code. The planned setup will include:
+The repository contains sanitized source code and an example configuration. Deploying the bot requires Slack, Notion, Google Apps Script, and Google Drive resources configured for your own environment.
 
-1. Creating or copying the required Notion databases
-2. Creating and configuring a Slack app
-3. Creating a Google Apps Script project
-4. Adding environment-specific values through Apps Script Properties
-5. Configuring Google Drive templates and destination folders
-6. Deploying Apps Script as a web application
-7. Connecting the Slack event and interaction endpoints
-8. Testing access controls before production use
+1. Clone this repository.
+2. Copy `examples/00_Config.example.js` to `src/00_Config.js`.
+3. Replace every placeholder with IDs from your own Slack, Notion, and Google Drive environment.
+4. Store authentication tokens and other secrets in Apps Script Properties—not directly in source files.
+5. Create or configure the required Notion data sources.
+6. Create a Slack app and configure its permissions, events, and interactive components.
+7. Create a Google Apps Script project and upload the contents of `src/`.
+8. Deploy Apps Script as a web application.
+9. Connect the Slack event and interaction endpoints to the web application URL.
+10. Test access controls and workflows in a non-production Slack channel before broader use.
 
-Real tokens, database identifiers, channel identifiers, folder identifiers, email addresses, and company-specific values are not included in the repository.
+> Detailed Notion schema and Slack permission documentation is still in progress.
+
+Real tokens, database identifiers, channel identifiers, folder identifiers, email addresses, and company-specific information are not included in this repository.
 
 ## Future Improvements
 
@@ -151,3 +158,9 @@ Based on early operational use, the system is expected to provide:
 ## Privacy and Security
 
 This public repository uses anonymized examples and placeholder configuration values. Production identifiers, credentials, personal information, project details, contractor rates, invoice data, and company-specific records must remain outside version control.
+
+The Apps Script web application uses anonymous access so Slack can deliver event and interaction callbacks. The current Apps Script-only implementation does not validate Slack’s request-signature headers.
+
+Before using this architecture for sensitive production workflows, place a signature-verifying gateway—such as Google Cloud Run or Cloud Functions—in front of Apps Script. The gateway should validate Slack’s request signature and timestamp before forwarding an authenticated request to the application.
+
+Application-level user and channel access controls should be treated as additional authorization checks, not as a substitute for authenticating the incoming Slack request.
