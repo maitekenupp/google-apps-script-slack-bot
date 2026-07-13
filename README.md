@@ -92,6 +92,10 @@ google-apps-script-slack-bot/
 ├── .gitignore
 ├── examples/
 │   └── 00_Config.example.js
+├── images/
+│   ├── main-menu.png
+│   ├── projects-menu.png
+│   └── projects-admin-menu.png
 └── src/
     ├── appsscript.json
     └── *.js
@@ -104,16 +108,23 @@ google-apps-script-slack-bot/
 
 ## Screenshots
 
-Anonymized screenshots of the following workflows will be added:
+### Interactive Slack menu
 
-- Main Slack menu
-- Project creation
-- Role announcement and claiming
-- Contractor assignment
-- Hours submission
-- Invoice confirmation
+The bot starts from a private Slack conversation and presents a guided, button-based menu.
 
-No company, contractor, client, or financial information will be published.
+![IZA interactive Slack menu](images/main-menu.png)
+
+### Project navigation
+
+Users can access project overviews, create projects, or enter the administrative workflow.
+
+![IZA projects menu](images/projects-menu.png)
+
+### Project administration
+
+Administrators can manage roles, assign contractors, review role claims, and control invoice-submission windows.
+
+![IZA projects admin menu](images/projects-admin-menu.png)
 
 ## Installation
 
