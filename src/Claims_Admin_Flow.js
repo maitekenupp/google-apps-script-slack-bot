@@ -47,8 +47,7 @@ function buildClaimsProjectListBlocks_(announcements) {
       {
         type: "actions",
         elements: [
-          button_("📋 Projects Menu", "menu_projects"),
-          button_("🏠 Main Menu", "menu_main")
+          button_("⬅️ Back", "projects_admin_menu")
         ]
       }
     ];

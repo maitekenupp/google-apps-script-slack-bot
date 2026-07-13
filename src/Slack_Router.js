@@ -277,8 +277,8 @@ function handleIzaButtonClick_(payload) {
     updateIzaMenu(
       context.channelId,
       context.messageTs,
-      buildProjectsMenuBlocks_(),
-      "IZA Projects Menu"
+      buildProjectsCreateMenuBlocks_(),
+      "IZA Create Menu"
     );
     return;
   }
