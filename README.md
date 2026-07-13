@@ -164,3 +164,9 @@ The Apps Script web application uses anonymous access so Slack can deliver event
 Before using this architecture for sensitive production workflows, place a signature-verifying gateway—such as Google Cloud Run or Cloud Functions—in front of Apps Script. The gateway should validate Slack’s request signature and timestamp before forwarding an authenticated request to the application.
 
 Application-level user and channel access controls should be treated as additional authorization checks, not as a substitute for authenticating the incoming Slack request.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+Copyright © 2026 Maitê Kenupp.
