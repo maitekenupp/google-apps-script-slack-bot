@@ -67,7 +67,7 @@ Early operational estimates indicate that the project creation and assignment pr
 
 ## Architecture
 
-
+```mermaid
 flowchart LR
     A[Administrators and contractors] --> B[Slack interface]
     B --> C[Google Apps Script]
@@ -75,7 +75,7 @@ flowchart LR
     C --> E[Google Drive templates]
     E --> F[Generated invoices]
     C --> B
-
+```
 
 1. An administrator or contractor starts a workflow from the bot’s Slack conversation.
 2. Slack sends the interaction to the Apps Script application.
@@ -86,7 +86,7 @@ flowchart LR
 
 ## Planned Repository Structure
 
-
+```text
 google-apps-script-slack-bot/
 ├── README.md
 ├── .gitignore
@@ -95,7 +95,7 @@ google-apps-script-slack-bot/
 ├── docs/         # Architecture and setup documentation
 ├── images/       # Anonymized screenshots and diagrams
 └── examples/     # Safe configuration and workflow examples
-
+```
 
 The application currently runs from the Google Apps Script environment. Source files will be added after company-specific identifiers and configuration values have been replaced with safe placeholders.
 
