@@ -1,0 +1,14 @@
+# Google Apps Script
+.clasp.json
+
+# Environment variables
+.env
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
