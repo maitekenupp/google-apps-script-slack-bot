@@ -298,7 +298,7 @@ function invoiceWindowFormatDate_(dateString) {
   return Utilities.formatDate(
     date,
     "UTC",
-    "MMM-dd-yy"
+    "MMMM d, yyyy"
   );
 }
 

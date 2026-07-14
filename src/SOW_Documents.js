@@ -4,11 +4,11 @@
  * File: SOW_Documents.gs
  *
  * Purpose:
- * Creates contractor SOW PDFs from Google Docs templates.
+ * Creates contractor SOW draft documents and final PDFs.
  *
  ******************************************************/
 
-function createContractorSowPdf_(sowData) {
+function createContractorSowDraft_(sowData) {
   const templateFile =
     DriveApp.getFileById(CONTRACTOR_SOW_TEMPLATE_DOC_ID);
 
@@ -25,6 +25,39 @@ function createContractorSowPdf_(sowData) {
   const doc = DocumentApp.openById(copiedDoc.getId());
   const body = doc.getBody();
 
+  fillContractorSowDocument_(body, sowData);
+
+  doc.saveAndClose();
+
+  return {
+    id: copiedDoc.getId(),
+    name: copiedDoc.getName(),
+    url: copiedDoc.getUrl()
+  };
+}
+
+function finalizeContractorSowPdf_(draftDocId, pdfFileName) {
+  const folder =
+    DriveApp.getFolderById(CONTRACTOR_SOW_FOLDER_ID);
+
+  const draftFile =
+    DriveApp.getFileById(draftDocId);
+
+  const pdfBlob = draftFile
+    .getBlob()
+    .getAs(MimeType.PDF)
+    .setName(pdfFileName);
+
+  const pdfFile = folder.createFile(pdfBlob);
+
+  return {
+    id: pdfFile.getId(),
+    name: pdfFile.getName(),
+    url: pdfFile.getUrl()
+  };
+}
+
+function fillContractorSowDocument_(body, sowData) {
   replaceSowPlaceholder_(body, "{{Contractor Name}}", sowData.contractorName);
   replaceSowPlaceholder_(body, "{{Project Name}}", sowData.projectName);
   replaceSowPlaceholder_(body, "{{Start Date}}", sowData.startDate);
@@ -43,23 +76,6 @@ function createContractorSowPdf_(sowData) {
   replaceSowPlaceholder_(body, "{{Standard Rate}}", sowFormatMoney_(sowData.standardRate));
   replaceSowPlaceholder_(body, "{{Total Compensation Cap}}", sowFormatMoney_(sowData.totalCompensationCap));
   replaceSowPlaceholder_(body, "{{Date}}", sowData.date);
-
-  doc.saveAndClose();
-
-  const pdfBlob = copiedDoc
-    .getBlob()
-    .getAs(MimeType.PDF)
-    .setName(sowData.fileName);
-
-  const pdfFile = folder.createFile(pdfBlob);
-
-  copiedDoc.setTrashed(true);
-
-  return {
-    id: pdfFile.getId(),
-    name: pdfFile.getName(),
-    url: pdfFile.getUrl()
-  };
 }
 
 function replaceSowPlaceholder_(element, placeholder, value) {

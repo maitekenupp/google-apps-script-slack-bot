@@ -669,17 +669,8 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
-  if (actionId === "sow_admin_start") {
-    handleSowAdminStart_(
-      context.channelId,
-      context.messageTs,
-      context.userId
-    );
-    return;
-  }
-
-  if (actionId === "sow_assignment_select") {
-    handleSowAssignmentSelect_(
+  if (actionId === "sow_generate_for_project") {
+    handleSowGenerateForProject_(
       payload,
       context.channelId,
       context.messageTs,
@@ -688,8 +679,9 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
-  if (actionId === "sow_create_confirm") {
-    handleSowCreateConfirm_(
+  if (actionId === "sow_finalize_for_project") {
+    handleSowFinalizeForProject_(
+      payload,
       context.channelId,
       context.messageTs,
       context.userId
@@ -697,8 +689,28 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
-  if (actionId === "sow_cancel") {
-    handleSowCancel_(
+  if (actionId === "sow_manage_start") {
+    handleSowManageStart_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "sow_manage_select") {
+    handleSowManageSelect_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "sow_manage_open_modal") {
+    openSignedSowModal_(
+      payload,
       context.channelId,
       context.messageTs,
       context.userId
@@ -744,6 +756,10 @@ function handleSlackViewSubmission_(payload) {
 
   if (payload.view.callback_id === "invoice_window_submit") {
     return handleInvoiceWindowModalSubmission_(payload);
+  }
+
+  if (payload.view.callback_id === "sow_signed_submit") {
+    return handleSignedSowModalSubmission_(payload);
   }
 
   return { response_action: "clear" };

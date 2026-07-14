@@ -21,49 +21,39 @@
 function doPost(e) {
   try {
     if (!e || !e.postData) {
-      return ContentService.createTextOutput('No postData');
+      return ContentService.createTextOutput("No postData");
     }
 
-    const rawBody = e.postData.contents || '';
-
-    /************************************
-     * SLACK INTERACTIONS
-     * Buttons, dropdowns, and modals
-     ************************************/
+    const rawBody = e.postData.contents || "";
 
     if (e.parameter && e.parameter.payload) {
       const payload = JSON.parse(e.parameter.payload);
       return handleSlackInteractionPayload_(payload);
     }
 
-    if (rawBody.indexOf('payload=') === 0) {
-      const encodedPayload = rawBody.substring('payload='.length);
+    if (rawBody.indexOf("payload=") === 0) {
+      const encodedPayload = rawBody.substring("payload=".length);
       const payload = JSON.parse(decodeURIComponent(encodedPayload));
       return handleSlackInteractionPayload_(payload);
     }
 
-    /************************************
-     * SLACK EVENTS
-     * Messages, mentions, file_shared, etc.
-     ************************************/
-
     const data = JSON.parse(rawBody);
 
-    if (data.type === 'url_verification') {
+    if (data.type === "url_verification") {
       return ContentService.createTextOutput(data.challenge);
     }
 
     if (isDuplicateSlackEvent_(data)) {
-      return ContentService.createTextOutput('Already processed');
+      return ContentService.createTextOutput("Already processed");
     }
 
     handleSlackEvent_(data);
 
-    return ContentService.createTextOutput('OK');
+    return ContentService.createTextOutput("OK");
 
   } catch (err) {
     handleWebhookError_(err);
-    return ContentService.createTextOutput('ERROR');
+    return ContentService.createTextOutput("ERROR");
   }
 }
 

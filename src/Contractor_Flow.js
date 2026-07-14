@@ -380,10 +380,10 @@ function handleContractorCreateConfirm_(userId, channelId, messageTs) {
         },
         {
           type: "actions",
-          elements: [
-            button_("📋 Projects", "menu_projects"),
-            button_("👋 Bye IZA", "menu_close")
-          ]
+          elements: buildContractorAssignmentSuccessButtons_(
+            projectId,
+            assignedCount > 0
+          )
         }
       ],
       "Contractors Assigned"
@@ -418,6 +418,27 @@ function handleContractorCreateConfirm_(userId, channelId, messageTs) {
       "Contractor Assignment Failed"
     );
   }
+}
+
+function buildContractorAssignmentSuccessButtons_(projectId, hasAssignedContractors) {
+  const buttons = [];
+
+  if (hasAssignedContractors && projectId) {
+    buttons.push({
+      type: "button",
+      text: {
+        type: "plain_text",
+        text: "🖨️ Generate SOWs",
+        emoji: true
+      },
+      action_id: "sow_generate_for_project",
+      value: projectId
+    });
+  }
+
+  buttons.unshift(button_("📋 Projects", "menu_projects"));
+
+  return buttons;
 }
 
 function postContractorRoleAnnouncement_(session, rolesToAnnounce) {

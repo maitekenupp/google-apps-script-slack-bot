@@ -4,15 +4,19 @@
  * File: SOW_Flow.gs
  *
  * Purpose:
- * Admin-only SOW generation flow.
+ * SOW generation, final PDF creation, and Dropbox Sign sending.
  *
  ******************************************************/
+
+/************************************
+ * OLD MANUAL ADMIN FLOW
+ ************************************/
 
 function handleSowAdminStart_(channelId, messageTs, userId) {
   updateIzaMenu(
     channelId,
     messageTs,
-    buildSowMessageBlocks_(
+    buildSowLoadingBlocks_(
       "📄 *Generate SOW*\n\nLoading contractor assignments..."
     ),
     "Loading SOW Assignments"
@@ -106,39 +110,15 @@ function handleSowCreateConfirm_(channelId, messageTs, userId) {
   updateIzaMenu(
     channelId,
     messageTs,
-    buildSowMessageBlocks_(
-      "📄 *Generate SOW*\n\nCreating the SOW PDF..."
+    buildSowLoadingBlocks_(
+      "📄 *Generate SOW*\n\nCreating the SOW draft..."
     ),
     "Creating SOW"
   );
 
-  const fileName = sowSafeFileName_(
-    `SOW - ${assignment.projectName} - ${assignment.contractorName}.pdf`
-  );
-
-  const pdfFile = createContractorSowPdf_({
-    fileName,
-    contractorName: assignment.contractorName,
-    projectName: assignment.projectName,
-    startDate: sowFormatDate_(assignment.startDate),
-    endDate: sowFormatDate_(assignment.endDate),
-    email: assignment.email,
-    phone: assignment.phone,
-    shortDescription: assignment.shortDescription,
-    roleSummary: assignment.roleSummary,
-    deliverablesSummary: assignment.deliverablesSummary,
-    scopeOfServices: assignment.scopeOfServices,
-    estimatedLevelOfEffort: assignment.estimatedLevelOfEffort,
-    totalHoursToContractor: assignment.totalHoursToContractor,
-    standardRate: assignment.standardRate,
-    totalCompensationCap: assignment.totalCompensationCap,
-    date: sowFormatDate_(sowToday_())
-  });
-
-  updateSowContractorFileForAssignments_(
-    assignment.assignmentIds,
-    pdfFile.name,
-    pdfFile.url
+  const result = autoGenerateSowForProjectContractor_(
+    assignment.projectId,
+    assignment.contractorName
   );
 
   clearSowSession_(userId);
@@ -146,7 +126,7 @@ function handleSowCreateConfirm_(channelId, messageTs, userId) {
   updateIzaMenu(
     channelId,
     messageTs,
-    buildSowCreatedBlocks_(assignment, pdfFile),
+    buildSowCreatedBlocks_(assignment, result.draftFile),
     "SOW Created"
   );
 }
@@ -164,6 +144,82 @@ function handleSowCancel_(channelId, messageTs, userId) {
     "SOW Canceled"
   );
 }
+
+/************************************
+ * PROJECT BUTTON FLOW
+ ************************************/
+
+function handleSowGenerateForProject_(payload, channelId, messageTs, userId) {
+  const projectId = payload.actions?.[0]?.value || "";
+
+  if (!projectId) {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildSowMessageBlocks_(
+        "🖨️ *Generate SOWs*\n\nI could not find the project ID.",
+        "projects_admin_menu"
+      ),
+      "Generate SOWs"
+    );
+    return;
+  }
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildSowLoadingBlocks_(
+      "🖨️ *Generate SOWs*\n\nCreating SOW draft documents..."
+    ),
+    "Creating SOW Drafts"
+  );
+
+  const results = generateSowsForProject_(projectId);
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildSowProjectResultsBlocks_(projectId, results),
+    "SOW Drafts Created"
+  );
+}
+
+function handleSowFinalizeForProject_(payload, channelId, messageTs, userId) {
+  const projectId = payload.actions?.[0]?.value || "";
+
+  if (!projectId) {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildSowMessageBlocks_(
+        "✅ *Finalize SOWs*\n\nI could not find the project ID.",
+        "projects_admin_menu"
+      ),
+      "Finalize SOWs"
+    );
+    return;
+  }
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildSowLoadingBlocks_(
+      "✅ *Finalize SOWs*\n\nCreating final PDF files..."
+    ),
+    "Finalizing SOWs"
+  );
+
+  const results = finalizeSowsForProject_(projectId);
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildSowFinalizeResultsBlocks_(projectId, results),
+    "SOWs Finalized"
+  );
+}
+
+
 
 /************************************
  * BLOCKS
@@ -198,7 +254,7 @@ function buildSowAssignmentSelectBlocks_(session) {
       {
         type: "actions",
         elements: [
-          button_("✅ Create SOW PDF", "sow_create_confirm"),
+          button_("✅ Create SOW Draft", "sow_create_confirm"),
           button_("⬅️ Back", "sow_admin_start"),
           button_("❌ Cancel", "sow_cancel")
         ]
@@ -247,18 +303,18 @@ function buildSowAssignmentSelectBlocks_(session) {
   ];
 }
 
-function buildSowCreatedBlocks_(assignment, pdfFile) {
+function buildSowCreatedBlocks_(assignment, file) {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
         text:
-          "✅ *SOW PDF Created*\n\n" +
+          "✅ *SOW Draft Created*\n\n" +
           `*Contractor:* ${assignment.contractorName}\n` +
           `*Project:* ${assignment.projectName}\n` +
           `*Roles:* ${assignment.roleSummary || "-"}\n\n` +
-          `<${pdfFile.url}|Open SOW PDF>`
+          `<${file.url}|Open SOW Draft>`
       }
     },
     {
@@ -283,10 +339,143 @@ function buildSowMessageBlocks_(text, backActionId) {
     {
       type: "actions",
       elements: [
-        button_(
-          backActionId ? "⬅️ Back" : "⬅️ Back",
-          backActionId || "projects_admin_menu"
-        )
+        button_("⬅️ Back", backActionId || "projects_admin_menu")
+      ]
+    }
+  ];
+}
+
+function buildSowLoadingBlocks_(text) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text
+      }
+    }
+  ];
+}
+
+function buildSowProjectResultsBlocks_(projectId, results) {
+  const created = results.created || [];
+  const skipped = results.skipped || [];
+  const failed = results.failed || [];
+
+  let text =
+    "✅ *SOW Drafts Created*\n\n" +
+    "Please review the Google Docs before finalizing.\n\n";
+
+  if (created.length) {
+    text += "*Drafts:*";
+
+    created.forEach(item => {
+      const file = item.draftFile || {};
+      const fileName = file.name || item.fileName || "SOW Draft";
+      const fileUrl = file.url || item.url || "";
+
+      text += `\n• ${item.contractorName}: <${fileUrl}|${fileName}>`;
+    });
+  } else {
+    text += "*Drafts:*\nNone";
+  }
+
+  if (skipped.length) {
+    text += "\n\n*Skipped:*";
+
+    skipped.forEach(item => {
+      text +=
+        `\n• ${item.contractorName || "Unknown"}: ` +
+        `${item.reason || "Skipped"}`;
+    });
+  }
+
+  if (failed.length) {
+    text += "\n\n*Failed:*";
+
+    failed.forEach(item => {
+      text +=
+        `\n• ${item.contractorName || "Unknown"}: ` +
+        `${item.error || "Unknown error"}`;
+    });
+  }
+
+  const actions = [
+    button_("⬅️ Projects", "menu_projects")
+  ];
+
+  if (created.length) {
+    actions.push({
+      type: "button",
+      text: {
+        type: "plain_text",
+        text: "✅ Finalize SOWs",
+        emoji: true
+      },
+      action_id: "sow_finalize_for_project",
+      value: projectId
+    });
+  }
+
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text
+      }
+    },
+    {
+      type: "actions",
+      elements: actions
+    }
+  ];
+}
+
+function buildSowFinalizeResultsBlocks_(projectId, results) {
+  const finalizedText = results.finalized.length
+    ? results.finalized
+        .map(item => `• *${item.contractorName}:* <${item.url}|${item.fileName}>`)
+        .join("\n")
+    : "None";
+
+  const skippedText = results.skipped.length
+    ? results.skipped
+        .map(item => `• ${item.reason || item}`)
+        .join("\n")
+    : "";
+
+  const failedText = results.failed.length
+    ? results.failed
+        .map(item => `• ${item.contractorName}: ${item.error}`)
+        .join("\n")
+    : "";
+
+  let text =
+    "✅ *SOW PDFs Finalized*\n\n" +
+    "These files are now ready to be sent for manual signature.\n\n" +
+    `*Pending Signature PDFs:*\n${finalizedText}`;
+
+  if (results.skipped.length) {
+    text += `\n\n*Skipped:*\n${skippedText}`;
+  }
+
+  if (results.failed.length) {
+    text += `\n\n*Failed:*\n${failedText}`;
+  }
+
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Projects", "menu_projects")
       ]
     }
   ];
@@ -297,7 +486,9 @@ function buildSowMessageBlocks_(text, backActionId) {
  ************************************/
 
 function loadSowAssignments_() {
-  const assignmentRows = queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+  const assignmentRows =
+    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+
   const projectsById = loadSowProjectsById_();
   const contractorsByName = loadSowContractorsByName_();
 
@@ -306,9 +497,7 @@ function loadSowAssignments_() {
   assignmentRows.forEach(row => {
     const p = row.properties;
 
-    if (sowHasExistingFile_(p["SOW Contractor"])) {
-      return;
-    }
+    if (sowHasExistingFile_(p["SOW Contractor"])) return;
 
     const contractorName = getText_(p["Contractor"]);
     if (!contractorName) return;
@@ -319,18 +508,18 @@ function loadSowAssignments_() {
     const project = projectsById[projectId];
     if (!project) return;
 
-    const roleNames = getMultiSelectNames_(p["Role"]);
-    const role = roleNames.length
-      ? roleNames.join(", ")
-      : getText_(p["Role"]);
-
+    const role = getSowAssignmentRole_(p);
     if (!role) return;
 
     const hoursToContractor = getNumber_(p["Hours to Contractor"]);
     if (hoursToContractor <= 0) return;
 
-    const standardRate = getNumber_(p["Rate per Hour"]);
-    const contractor = contractorsByName[contractorName.toLowerCase()] || {};
+    const contractor =
+      contractorsByName[contractorName.toLowerCase()] || {};
+
+    const standardRate =
+      contractor.standardRate ||
+      getNumber_(p["Rate per Hour"]);
 
     const groupKey =
       `${projectId}_${contractorName.toLowerCase()}`;
@@ -364,40 +553,7 @@ function loadSowAssignments_() {
   });
 
   return Object.keys(groups)
-    .map(key => {
-      const group = groups[key];
-
-      const totalHours = group.roles.reduce((sum, role) => {
-        return sum + Number(role.hoursToContractor || 0);
-      }, 0);
-
-      group.totalHoursToContractor = totalHours;
-      group.totalCompensationCap = totalHours * group.standardRate;
-
-      group.roleSummary = group.roles
-        .map(role => role.role)
-        .join(", ");
-
-      group.deliverablesSummary = group.roles
-        .map(role => `${role.role}: ${role.deliverables || "-"}`)
-        .join("\n");
-
-      group.scopeOfServices = group.roles
-        .map(role => `${role.role}: ${role.deliverables || "-"}`)
-        .join("\n");
-
-      group.estimatedLevelOfEffort =
-        group.roles
-          .map(role =>
-            `• Total Estimated Hours: ${role.hoursToContractor} - ${role.role}`
-          )
-          .join("\n") +
-        "\n" +
-        `• Hourly Rate: ${sowFormatMoney_(group.standardRate)} USD\n` +
-        `• Maximum Compensation: ${sowFormatMoney_(group.totalCompensationCap)} USD, unless amended in writing.`;
-
-      return group;
-    })
+    .map(key => buildSowGroupSummary_(groups[key]))
     .sort((a, b) =>
       a.projectName.localeCompare(b.projectName) ||
       a.contractorName.localeCompare(b.contractorName)
@@ -426,14 +582,16 @@ function loadSowContractorsByName_() {
 
   rows.forEach(row => {
     const name = getText_(row.properties["Name"]);
-
     if (!name) return;
 
     contractors[name.toLowerCase()] = {
       id: row.id,
       name,
       email: getText_(row.properties["Email"]),
-      phone: getText_(row.properties["Phone Number"])
+      phone: getText_(row.properties["Phone Number"]),
+      standardRate:
+        getNumber_(row.properties["Standart Rate"]) ||
+        getNumber_(row.properties["Standard Rate"])
     };
   });
 
@@ -468,6 +626,278 @@ function findSowDeliverables_(projectId, roleName) {
 }
 
 /************************************
+ * GENERATION
+ ************************************/
+
+function generateSowsForProject_(projectId) {
+  const assignmentRows =
+    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+
+  const contractorNames = [];
+
+  assignmentRows.forEach(row => {
+    const p = row.properties;
+
+    if (sowHasExistingFile_(p["SOW Contractor"])) return;
+
+    const rowProjectId =
+      p["Projects 1 related to"]?.relation?.[0]?.id || "";
+
+    if (rowProjectId !== projectId) return;
+
+    const contractorName = getText_(p["Contractor"]);
+    if (!contractorName) return;
+
+    if (!contractorNames.includes(contractorName)) {
+      contractorNames.push(contractorName);
+    }
+  });
+
+  const created = [];
+  const skipped = [];
+  const failed = [];
+
+  contractorNames.forEach(contractorName => {
+    try {
+      const result = autoGenerateSowForProjectContractor_(
+        projectId,
+        contractorName
+      );
+
+      if (result && result.draftFile) {
+        created.push({
+          contractorName,
+          draftFile: result.draftFile,
+          fileName: result.draftFile.name || "SOW Draft",
+          url: result.draftFile.url || ""
+        });
+      } else {
+        skipped.push({
+          contractorName,
+          reason: "No SOW draft was created."
+        });
+      }
+    } catch (err) {
+      failed.push({
+        contractorName,
+        error: err.message
+      });
+    }
+  });
+
+  return {
+    created,
+    skipped,
+    failed
+  };
+}
+
+function autoGenerateSowForProjectContractor_(projectId, contractorName) {
+  const assignment = buildSowGroupForProjectContractor_(
+    projectId,
+    contractorName
+  );
+
+  if (!assignment) return null;
+
+  const fileName = sowSafeFileName_(
+    `SOW - ${assignment.projectName} - ${assignment.contractorName}`
+  );
+
+  const draftFile = createContractorSowDraft_({
+    fileName,
+    contractorName: assignment.contractorName,
+    projectName: assignment.projectName,
+    startDate: sowFormatDate_(assignment.startDate),
+    endDate: sowFormatDate_(assignment.endDate),
+    email: assignment.email,
+    phone: assignment.phone,
+    shortDescription: assignment.shortDescription,
+    roleSummary: assignment.roleSummary,
+    deliverablesSummary: assignment.deliverablesSummary,
+    scopeOfServices: assignment.scopeOfServices,
+    estimatedLevelOfEffort: assignment.estimatedLevelOfEffort,
+    totalHoursToContractor: assignment.totalHoursToContractor,
+    standardRate: assignment.standardRate,
+    totalCompensationCap: assignment.totalCompensationCap,
+    date: sowFormatDate_(sowToday_())
+  });
+
+  updateSowContractorFileForAssignments_(
+    assignment.assignmentIds,
+    draftFile
+  );
+
+  return {
+    assignment,
+    draftFile
+  };
+}
+
+function buildSowGroupForProjectContractor_(projectId, contractorName) {
+  const assignmentRows =
+    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+
+  const projectsById = loadSowProjectsById_();
+  const contractorsByName = loadSowContractorsByName_();
+
+  const project = projectsById[projectId];
+  const contractor =
+    contractorsByName[String(contractorName || "").toLowerCase()] || {};
+
+  if (!project || !contractorName) return null;
+
+  const group = {
+    id: `${projectId}_${String(contractorName).toLowerCase()}`,
+    projectId,
+    projectName: project.name,
+    startDate: project.startDate,
+    endDate: project.endDate,
+    shortDescription: project.shortDescription,
+    contractorName,
+    contractorId: contractor.id || "",
+    email: contractor.email || "",
+    phone: contractor.phone || "",
+    standardRate: contractor.standardRate || 0,
+    roles: [],
+    assignmentIds: []
+  };
+
+  assignmentRows.forEach(row => {
+    const p = row.properties;
+
+    const rowContractorName = getText_(p["Contractor"]);
+
+    if (
+      String(rowContractorName || "").toLowerCase() !==
+      String(contractorName || "").toLowerCase()
+    ) {
+      return;
+    }
+
+    const rowProjectId =
+      p["Projects 1 related to"]?.relation?.[0]?.id || "";
+
+    if (rowProjectId !== projectId) return;
+
+    const role = getSowAssignmentRole_(p);
+    if (!role) return;
+
+    const hoursToContractor = getNumber_(p["Hours to Contractor"]);
+    if (hoursToContractor <= 0) return;
+
+    group.roles.push({
+      assignmentId: row.id,
+      role,
+      deliverables: findSowDeliverables_(projectId, role),
+      hoursToContractor
+    });
+
+    group.assignmentIds.push(row.id);
+  });
+
+  if (!group.roles.length) return null;
+
+  return buildSowGroupSummary_(group);
+}
+
+function finalizeSowsForProject_(projectId) {
+  const assignmentRows =
+    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+
+  const projectsById = loadSowProjectsById_();
+  const project = projectsById[projectId] || {};
+
+  const draftGroups = {};
+
+  assignmentRows.forEach(row => {
+    const p = row.properties;
+
+    const rowProjectId =
+      p["Projects 1 related to"]?.relation?.[0]?.id || "";
+
+    if (rowProjectId !== projectId) return;
+
+    const contractorName = getText_(p["Contractor"]);
+    if (!contractorName) return;
+
+    const sowFile = getSowContractorFirstFile_(p["SOW Contractor"]);
+    if (!sowFile || !sowFile.url) return;
+
+    const draftDocId = extractGoogleDriveFileId_(sowFile.url);
+    if (!draftDocId) return;
+
+    const groupKey =
+      `${projectId}_${contractorName.toLowerCase()}_${draftDocId}`;
+
+    if (!draftGroups[groupKey]) {
+      draftGroups[groupKey] = {
+        projectId,
+        projectName: project.name || "Project",
+        contractorName,
+        draftDocId,
+        draftName: sowFile.name || "SOW Draft",
+        assignmentIds: []
+      };
+    }
+
+    draftGroups[groupKey].assignmentIds.push(row.id);
+  });
+
+  const finalized = [];
+  const skipped = [];
+  const failed = [];
+
+  Object.keys(draftGroups).forEach(key => {
+    const group = draftGroups[key];
+
+    try {
+      const pdfFileName = sowSafeFileName_(
+        `SOW - Pending Signature - ${group.projectName} - ${group.contractorName}.pdf`
+      );
+
+      const pdfFile = finalizeContractorSowPdf_(
+        group.draftDocId,
+        pdfFileName
+      );
+
+      updateSowContractorFileForAssignments_(
+        group.assignmentIds,
+        pdfFile
+      );
+
+      DriveApp
+        .getFileById(group.draftDocId)
+        .setTrashed(true);
+
+      finalized.push({
+        contractorName: group.contractorName,
+        fileName: pdfFile.name,
+        url: pdfFile.url
+      });
+
+    } catch (err) {
+      failed.push({
+        contractorName: group.contractorName,
+        error: err.message
+      });
+    }
+  });
+
+  if (!Object.keys(draftGroups).length) {
+    skipped.push({
+      reason: "No SOW drafts found for this project."
+    });
+  }
+
+  return {
+    finalized,
+    skipped,
+    failed
+  };
+}
+
+/************************************
  * SESSION
  ************************************/
 
@@ -495,6 +925,47 @@ function clearSowSession_(userId) {
  * HELPERS
  ************************************/
 
+function buildSowGroupSummary_(group) {
+  const totalHours = group.roles.reduce((sum, role) => {
+    return sum + Number(role.hoursToContractor || 0);
+  }, 0);
+
+  group.totalHoursToContractor = totalHours;
+  group.totalCompensationCap = totalHours * Number(group.standardRate || 0);
+
+  group.roleSummary = group.roles
+    .map(role => role.role)
+    .join(", ");
+
+  group.deliverablesSummary = group.roles
+    .map(role => `${role.role}: ${role.deliverables || "-"}`)
+    .join("\n");
+
+  group.scopeOfServices = group.roles
+    .map(role => `• ${role.role}: ${role.deliverables || "-"}`)
+    .join("\n");
+
+  group.estimatedLevelOfEffort =
+    group.roles
+      .map(role =>
+        `• Total Estimated Hours: ${role.hoursToContractor} - ${role.role}`
+      )
+      .join("\n") +
+    "\n" +
+    `• Hourly Rate: ${sowFormatMoney_(group.standardRate)} USD\n` +
+    `• Maximum Compensation: ${sowFormatMoney_(group.totalCompensationCap)} USD, unless amended in writing.`;
+
+  return group;
+}
+
+function getSowAssignmentRole_(properties) {
+  const roleNames = getMultiSelectNames_(properties["Role"]);
+
+  return roleNames.length
+    ? roleNames.join(", ")
+    : getText_(properties["Role"]);
+}
+
 function sowGetDateStart_(property) {
   return property?.date?.start || "";
 }
@@ -515,7 +986,7 @@ function sowFormatDate_(dateString) {
   return Utilities.formatDate(
     date,
     "UTC",
-    "MMM-dd-yy"
+    "MMMM d, yyyy"
   );
 }
 
@@ -549,8 +1020,79 @@ function sowHasExistingFile_(property) {
   return false;
 }
 
-function updateSowContractorFileForAssignments_(assignmentIds, fileName, fileUrl) {
-  (assignmentIds || []).forEach(assignmentId => {
+function getSowContractorFirstFile_(property) {
+  const files = property?.files || [];
+
+  if (!files.length) {
+    return null;
+  }
+
+  const file = files[0];
+
+  if (file.external?.url) {
+    return {
+      name: file.name || "SOW Draft",
+      url: file.external.url
+    };
+  }
+
+  if (file.file?.url) {
+    return {
+      name: file.name || "SOW Draft",
+      url: file.file.url
+    };
+  }
+
+  return null;
+}
+
+function extractGoogleDriveFileId_(url) {
+  const text = String(url || "");
+
+  const fileMatch = text.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileMatch && fileMatch[1]) {
+    return fileMatch[1];
+  }
+
+  const idMatch = text.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) {
+    return idMatch[1];
+  }
+
+  const openMatch = text.match(/\/open\?id=([a-zA-Z0-9_-]+)/);
+  if (openMatch && openMatch[1]) {
+    return openMatch[1];
+  }
+
+  return "";
+}
+
+function updateSowContractorFileForAssignments_(assignmentIds, fileOrName, fileUrl) {
+  if (!assignmentIds || !assignmentIds.length || !fileOrName) return;
+
+  let fileName = "";
+  let finalFileUrl = "";
+
+  if (typeof fileOrName === "string") {
+    fileName = fileOrName;
+    finalFileUrl = fileUrl || "";
+  } else {
+    fileName =
+      typeof fileOrName.getName === "function"
+        ? fileOrName.getName()
+        : fileOrName.name || "SOW";
+
+    finalFileUrl =
+      typeof fileOrName.getUrl === "function"
+        ? fileOrName.getUrl()
+        : fileOrName.url || "";
+  }
+
+  if (!finalFileUrl) {
+    throw new Error("Missing SOW file URL.");
+  }
+
+  assignmentIds.forEach(assignmentId => {
     notionFetch_(
       `https://api.notion.com/v1/pages/${assignmentId}`,
       "patch",
@@ -562,7 +1104,7 @@ function updateSowContractorFileForAssignments_(assignmentIds, fileName, fileUrl
                 name: fileName,
                 type: "external",
                 external: {
-                  url: fileUrl
+                  url: finalFileUrl
                 }
               }
             ]

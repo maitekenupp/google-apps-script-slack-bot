@@ -1031,7 +1031,7 @@ function invoiceFormatShortDate_(dateString) {
   return Utilities.formatDate(
     date,
     "America/Los_Angeles",
-    "MMM-dd-yy"
+    "MMMM d, yyyy"
   );
 }
 
@@ -1077,6 +1077,6 @@ function invoiceAddDaysFromDateString_(dateString, days) {
   return Utilities.formatDate(
     date,
     "UTC",
-    "yyyy-MM-dd"
+    "MMMM d, yyyy"
   );
 }

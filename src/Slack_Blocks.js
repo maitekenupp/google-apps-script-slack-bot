@@ -107,7 +107,7 @@ function buildProjectsAdminMenuBlocks_() {
     {
       type: "actions",
       elements: [
-        button_("📄 Generate SOW", "sow_admin_start"),
+        button_("📄 Manage SOWs", "sow_manage_start"),
         button_("🗓️ Invoice Window", "invoice_window_admin")
       ]
     },
