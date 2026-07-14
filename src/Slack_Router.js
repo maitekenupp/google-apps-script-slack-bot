@@ -669,6 +669,43 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
+  if (actionId === "sow_admin_start") {
+    handleSowAdminStart_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "sow_assignment_select") {
+    handleSowAssignmentSelect_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "sow_create_confirm") {
+    handleSowCreateConfirm_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "sow_cancel") {
+    handleSowCancel_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
   sendEphemeralMessage(
     context.channelId,
     context.userId,

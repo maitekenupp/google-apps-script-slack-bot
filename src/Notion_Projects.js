@@ -118,7 +118,7 @@ function applyDefaultProjectTemplate_(pageId) {
       }
     }
   );
-}
+} 
 
 function buildSowFilesPayload_(sowFiles) {
   if (!sowFiles) return [];

@@ -9,6 +9,7 @@
  ******************************************************/
 
 function handleInvoiceStart_(channelId, messageTs, userId) {
+  
   if (!isInvoiceSubmissionWindowOpen_()) {
     updateIzaMenu(
       channelId,
@@ -683,7 +684,7 @@ function findInvoiceContractorBySlackId_(userId) {
     id: match.id,
     name: getText_(match.properties["Name"]),
     email: getText_(match.properties["Email"]),
-    rate: getNumber_(match.properties["Standart Rate"]),
+    rate: getNumber_(match.properties["Standard Rate"]),
     payTo: getText_(match.properties["Pay To"])
   };
 }
