@@ -24,7 +24,8 @@ function buildMainMenuBlocks_(userId) {
       type: "actions",
       elements: [
         button_("📊 Projects", "menu_projects"),
-        button_("👥 Operations", "menu_operations")
+        button_("👥 Operations", "menu_operations"),
+        button_("🐞 Report Bug", "bug_report_open")
       ]
     },
     {

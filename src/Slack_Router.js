@@ -46,6 +46,16 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
+  if (actionId === "bug_report_open") {
+    openBugReportModal_(
+      payload.trigger_id,
+      context.userId,
+      context.channelId,
+      context.messageTs
+    );
+    return;
+  }
+
   if (actionId === "projects_create_menu") {
     updateIzaMenu(
       context.channelId,
@@ -727,6 +737,10 @@ function handleSlackViewSubmission_(payload) {
 
   if (payload.view.callback_id === "invoice_window_submit") {
     return handleInvoiceWindowModalSubmission_(payload);
+  }
+
+  if (payload.view.callback_id === "bug_report_submit") {
+    return handleBugReportModalSubmit_(payload);
   }
 
   return { response_action: "clear" };
