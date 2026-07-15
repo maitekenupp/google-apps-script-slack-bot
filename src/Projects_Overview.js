@@ -32,7 +32,7 @@ function buildProjectsOverviewLoadingBlocks_() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "📊 *Projects Overview*\n\nReviewing the Notion project database..."
+        text: "📋 *Projects Overview*\n\nReviewing the Notion project database..."
       }
     }
   ];
@@ -56,6 +56,12 @@ function buildProjectsOverviewBlocks_(reportText) {
         type: "mrkdwn",
         text: safeText
       }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("🔄 Update Project Status", "project_status_update_start")
+      ]
     },
     {
       type: "actions",

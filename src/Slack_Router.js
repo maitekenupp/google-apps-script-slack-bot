@@ -108,6 +108,53 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
+  if (actionId === "project_status_update_start") {
+    startProjectStatusUpdate_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "project_status_project_select") {
+    handleProjectStatusProjectSelect_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "project_status_value_select") {
+    handleProjectStatusValueSelect_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "project_status_confirm") {
+    handleProjectStatusConfirm_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "project_status_cancel") {
+    handleProjectStatusCancel_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
   if (actionId === "ops_workload") {
     handleWorkloadReportButton_(
       context.channelId,
