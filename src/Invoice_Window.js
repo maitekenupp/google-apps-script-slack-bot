@@ -286,7 +286,7 @@ function invoiceWindowToday_() {
   return Utilities.formatDate(
     new Date(),
     "America/Los_Angeles",
-    "yyyy-MM-dd"
+    "MMMM d, yyyy"
   );
 }
 

@@ -689,35 +689,6 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
-  if (actionId === "sow_manage_start") {
-    handleSowManageStart_(
-      context.channelId,
-      context.messageTs,
-      context.userId
-    );
-    return;
-  }
-
-  if (actionId === "sow_manage_select") {
-    handleSowManageSelect_(
-      payload,
-      context.channelId,
-      context.messageTs,
-      context.userId
-    );
-    return;
-  }
-
-  if (actionId === "sow_manage_open_modal") {
-    openSignedSowModal_(
-      payload,
-      context.channelId,
-      context.messageTs,
-      context.userId
-    );
-    return;
-  }
-
   sendEphemeralMessage(
     context.channelId,
     context.userId,
@@ -756,10 +727,6 @@ function handleSlackViewSubmission_(payload) {
 
   if (payload.view.callback_id === "invoice_window_submit") {
     return handleInvoiceWindowModalSubmission_(payload);
-  }
-
-  if (payload.view.callback_id === "sow_signed_submit") {
-    return handleSignedSowModalSubmission_(payload);
   }
 
   return { response_action: "clear" };

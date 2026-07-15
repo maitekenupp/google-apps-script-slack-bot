@@ -101,13 +101,7 @@ function buildProjectsAdminMenuBlocks_() {
       elements: [
         button_("👥 Add Roles", "existing_project_add_roles"),
         button_("👷 Assign Contractors", "existing_project_assign_contractors"),
-        button_("📌 Role Claims", "claims_admin_menu")
-      ]
-    },
-    {
-      type: "actions",
-      elements: [
-        button_("📄 Manage SOWs", "sow_manage_start"),
+        button_("📌 Role Claims", "claims_admin_menu"),
         button_("🗓️ Invoice Window", "invoice_window_admin")
       ]
     },

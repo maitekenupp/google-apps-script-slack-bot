@@ -95,7 +95,7 @@ function buildClaimsProjectListBlocks_(announcements) {
   blocks.push({
     type: "actions",
     elements: [
-      button_("📋 Projects Menu", "menu_projects"),
+      button_("⬅️ Back", "projects_admin_menu"),
       button_("🏠 Main Menu", "menu_main")
     ]
   });
@@ -120,8 +120,7 @@ function buildClaimsRoleListBlocks_(announcementKey) {
       {
         type: "actions",
         elements: [
-          button_("📌 Claims Menu", "claims_admin_menu"),
-          button_("📋 Projects Menu", "menu_projects")
+          button_("⬅️ Back", "claims_admin_menu")
         ]
       }
     ];
@@ -185,8 +184,7 @@ function buildClaimsRoleListBlocks_(announcementKey) {
   blocks.push({
     type: "actions",
     elements: [
-      button_("⬅️ Claims Menu", "claims_admin_menu"),
-      button_("📋 Projects Menu", "menu_projects"),
+      button_("⬅️ Back", "claims_admin_menu"),
       {
         type: "button",
         text: {
@@ -219,7 +217,7 @@ function buildClaimsClaimantBlocks_(announcementKey, roleIndex) {
       {
         type: "actions",
         elements: [
-          button_("📌 Claims Menu", "claims_admin_menu")
+          button_("⬅️ Back", "claims_admin_menu")
         ]
       }
     ];
@@ -239,7 +237,7 @@ function buildClaimsClaimantBlocks_(announcementKey, roleIndex) {
       {
         type: "actions",
         elements: [
-          button_("📌 Claims Menu", "claims_admin_menu")
+          button_("⬅️ Back", "claims_admin_menu")
         ]
       }
     ];
@@ -270,8 +268,7 @@ function buildClaimsClaimantBlocks_(announcementKey, roleIndex) {
             },
             action_id: "claims_view_project",
             value: announcementKey
-          },
-          button_("📋 Projects Menu", "menu_projects")
+          }
         ]
       }
     ];
@@ -349,8 +346,7 @@ function buildClaimsClaimantBlocks_(announcementKey, roleIndex) {
         },
         action_id: "claims_view_project",
         value: announcementKey
-      },
-      button_("📋 Projects Menu", "menu_projects")
+      }
     ]
   });
 
@@ -667,8 +663,18 @@ function handleClaimsAssignPerson_(channelId, messageTs, value) {
     .remove("PROJECTS_NEEDING_CONTRACTORS");
 
   refreshClaimNotificationMessages_(data.announcementKey);
-  closeAnnouncementIfComplete_(data.announcementKey);
+
+  const announcementClosed =
+    closeAnnouncementIfComplete_(data.announcementKey);
+
   refreshClaimNotificationMessages_(data.announcementKey);
+
+  if (announcementClosed) {
+    const closedAnnouncement =
+      getRoleClaimAnnouncement_(data.announcementKey);
+
+    postSowReadyAfterClaimClose_(closedAnnouncement);
+  }
 
   notifySelectedContractor_(
     stored,
@@ -747,7 +753,7 @@ function handleClaimsCloseAnnouncement_(channelId, messageTs, announcementKey) {
       {
         type: "actions",
         elements: [
-          button_("📌 Claims Menu", "claims_admin_menu")
+          button_("⬅️ Back", "claims_admin_menu")
         ]
       }
     ],
@@ -1015,4 +1021,46 @@ function sortAnnouncementRolesByRoleSort_(roles) {
 
     return String(a.role || "").localeCompare(String(b.role || ""));
   });
+}
+
+function postSowReadyAfterClaimClose_(announcement) {
+  const projectId = announcement.project?.id || "";
+  const projectName = announcement.project?.name || "this project";
+
+  if (!projectId) {
+    return;
+  }
+
+  postSlackMessage_(
+    CONTRACTOR_CLAIMS_CHANNEL,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "🖨️ *SOWs Ready to Generate*\n\n" +
+            `The role announcement for *${projectName}* is now closed.\n\n` +
+            "All announced roles have been assigned.\n" +
+            "Please generate SOWs for the assigned contractors."
+        }
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "🖨️ Generate SOWs",
+              emoji: true
+            },
+            action_id: "sow_generate_for_project",
+            value: projectId
+          }
+        ]
+      }
+    ],
+    "SOWs Ready to Generate"
+  );
 }

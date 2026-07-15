@@ -234,7 +234,7 @@ function invoiceLastDayOfCurrentMonth_() {
   return Utilities.formatDate(
     lastDay,
     "UTC",
-    "yyyy-MM-dd"
+    "MMMM d, yyyy"
   );
 }
 

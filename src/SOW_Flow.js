@@ -400,9 +400,7 @@ function buildSowProjectResultsBlocks_(projectId, results) {
     });
   }
 
-  const actions = [
-    button_("⬅️ Projects", "menu_projects")
-  ];
+  const actions = [];
 
   if (created.length) {
     actions.push({
@@ -475,7 +473,7 @@ function buildSowFinalizeResultsBlocks_(projectId, results) {
     {
       type: "actions",
       elements: [
-        button_("⬅️ Projects", "menu_projects")
+        button_("👋 Bye IZA", "menu_close")
       ]
     }
   ];
@@ -852,7 +850,17 @@ function finalizeSowsForProject_(projectId) {
     const group = draftGroups[key];
 
     try {
+      const year = Utilities.formatDate(
+        new Date(),
+        "America/Los_Angeles",
+        "yyyy"
+      );
+
       const pdfFileName = sowSafeFileName_(
+        `${year} - ${group.projectName} - ${group.contractorName} - Attachment A — Statement of Work (SOW).pdf`
+      );
+
+      const notionFileName = sowSafeFileName_(
         `SOW - Pending Signature - ${group.projectName} - ${group.contractorName}.pdf`
       );
 
@@ -863,7 +871,9 @@ function finalizeSowsForProject_(projectId) {
 
       updateSowContractorFileForAssignments_(
         group.assignmentIds,
-        pdfFile
+        pdfFile,
+        null,
+        notionFileName
       );
 
       DriveApp
@@ -872,7 +882,7 @@ function finalizeSowsForProject_(projectId) {
 
       finalized.push({
         contractorName: group.contractorName,
-        fileName: pdfFile.name,
+        fileName: notionFileName,
         url: pdfFile.url
       });
 
@@ -974,7 +984,7 @@ function sowToday_() {
   return Utilities.formatDate(
     new Date(),
     "America/Los_Angeles",
-    "yyyy-MM-dd"
+    "MMMM d, yyyy"
   );
 }
 
@@ -1067,7 +1077,7 @@ function extractGoogleDriveFileId_(url) {
   return "";
 }
 
-function updateSowContractorFileForAssignments_(assignmentIds, fileOrName, fileUrl) {
+function updateSowContractorFileForAssignments_(assignmentIds, fileOrName, fileUrl, notionFileName) {
   if (!assignmentIds || !assignmentIds.length || !fileOrName) return;
 
   let fileName = "";
@@ -1101,7 +1111,7 @@ function updateSowContractorFileForAssignments_(assignmentIds, fileOrName, fileU
           "SOW Contractor": {
             files: [
               {
-                name: fileName,
+                name: notionFileName || fileName,
                 type: "external",
                 external: {
                   url: finalFileUrl

@@ -11,7 +11,7 @@ function loadTeamDirectoryUsers_() {
   const users = rows
     .map(row => {
       const name = getText_(row.properties["Name"]);
-      const rate = getNumber_(row.properties["Standart Rate"]);
+      const rate = getNumber_(row.properties["Standard Rate"]);
       const slackId = getText_(row.properties["Slack UID"]);
       const izaRole = normalizeIzaRole_(
         getText_(row.properties["IZA Role"])

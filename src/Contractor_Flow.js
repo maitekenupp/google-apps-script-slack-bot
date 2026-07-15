@@ -410,7 +410,7 @@ function handleContractorCreateConfirm_(userId, channelId, messageTs) {
         {
           type: "actions",
           elements: [
-            button_("⬅️ Projects", "menu_projects"),
+            button_("⬅️ Back", "projects_admin_menu"),
             button_("🏠 Main Menu", "menu_main")
           ]
         }
@@ -420,25 +420,26 @@ function handleContractorCreateConfirm_(userId, channelId, messageTs) {
   }
 }
 
-function buildContractorAssignmentSuccessButtons_(projectId, hasAssignedContractors) {
-  const buttons = [];
-
-  if (hasAssignedContractors && projectId) {
-    buttons.push({
-      type: "button",
-      text: {
-        type: "plain_text",
-        text: "🖨️ Generate SOWs",
-        emoji: true
-      },
-      action_id: "sow_generate_for_project",
-      value: projectId
-    });
+function buildContractorAssignmentSuccessButtons_(projectId, canGenerateSows) {
+  if (canGenerateSows) {
+    return [
+      {
+        type: "button",
+        text: {
+          type: "plain_text",
+          text: "🖨️ Generate SOWs",
+          emoji: true
+        },
+        action_id: "sow_generate_for_project",
+        value: projectId
+      }
+    ];
   }
 
-  buttons.unshift(button_("📋 Projects", "menu_projects"));
-
-  return buttons;
+  return [
+    button_("⬅️ Back", "projects_admin_menu"),
+    button_("👋 Bye IZA", "menu_close")
+  ];
 }
 
 function postContractorRoleAnnouncement_(session, rolesToAnnounce) {
@@ -1079,20 +1080,26 @@ function areAllAnnouncementRolesAssigned_(announcement) {
 }
 
 function closeAnnouncementIfComplete_(announcementKey) {
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(announcementKey);
+  const item = getRoleClaimAnnouncement_(announcementKey);
 
-  if (!raw) return;
-
-  const data = JSON.parse(raw);
-
-  if (areAllAnnouncementRolesAssigned_(data)) {
-    data.closed = true;
-    data.closedAt = new Date().toISOString();
-
-    PropertiesService.getScriptProperties().setProperty(
-      announcementKey,
-      JSON.stringify(data)
-    );
+  if (!item || item.closedAt) {
+    return false;
   }
+
+  const allAssigned = (item.roles || []).every(role => role.assignedTo);
+
+  if (!allAssigned) {
+    return false;
+  }
+
+  item.closedAt = new Date().toISOString();
+
+  PropertiesService.getScriptProperties().setProperty(
+    announcementKey,
+    JSON.stringify(item)
+  );
+
+  refreshClaimNotificationMessages_(announcementKey);
+
+  return true;
 }
