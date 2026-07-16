@@ -652,6 +652,91 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
+  if (actionId === "extension_start") {
+    handleExtensionStart_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "extension_assignment_select") {
+    handleExtensionAssignmentSelect_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "extension_previous") {
+    handleExtensionPrevious_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "extension_cancel") {
+    handleExtensionCancel_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "extension_open_modal") {
+    handleExtensionOpenModal_(
+      payload,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "extension_approve") {
+    handleExtensionApprove_(
+      context.channelId,
+      context.messageTs,
+      context.userId,
+      payload.actions[0].value
+    );
+    return;
+  }
+
+  if (actionId === "extension_deny") {
+    handleExtensionDeny_(
+      context.channelId,
+      context.messageTs,
+      context.userId,
+      payload.actions[0].value
+    );
+    return;
+  }
+
+  if (actionId === "extension_cancel_request") {
+    handleExtensionCancelRequest_(
+      context.channelId,
+      context.messageTs,
+      context.userId,
+      payload.actions[0].value
+    );
+    return;
+  }
+
+  if (actionId === "extension_finalize_amendment") {
+    handleExtensionFinalizeAmendment_(
+      context.channelId,
+      context.messageTs,
+      context.userId,
+      payload.actions[0].value
+    );
+    return;
+  }
+
   if (actionId === "existing_project_add_roles") {
   showExistingProjectRoleSelect_(
     context.userId,
@@ -814,6 +899,10 @@ function handleSlackViewSubmission_(payload) {
 
   if (payload.view.callback_id === "project_role_claim_submit") {
     return handleProjectRoleClaimSubmit_(payload);
+  }
+
+  if (payload.view.callback_id === "extension_request_submit") {
+    return handleExtensionRequestModalSubmit_(payload);
   }
 
   if (payload.view.callback_id === "client_modal_submit") {

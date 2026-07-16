@@ -5,7 +5,7 @@
  *
  * Purpose:
  * Scans HelloSign / Requested signatures folder and syncs
- * signed SOW PDFs back into Notion.
+ * signed contract PDFs back into Notion.
  *
  ******************************************************/
 
@@ -21,7 +21,7 @@ function runScheduledSowSignatureFolderScan() {
       postSlackMessage_(
         CONTRACTOR_CLAIMS_CHANNEL,
         buildSignedSowReceivedBlocks_(item),
-        "Signed SOW received"
+        "Signed document received"
       );
     });
   }
@@ -30,7 +30,7 @@ function runScheduledSowSignatureFolderScan() {
     postSlackMessage_(
       CONTRACTOR_CLAIMS_CHANNEL,
       buildSowSignatureFolderSummaryBlocks_(result),
-      "SOW Signature Summary"
+      "Signature Summary"
     );
   }
 
@@ -59,7 +59,11 @@ function scanHelloSignRequestedSignatures_() {
       result.awaitingSignature.push({
         ...sow,
         helloSignFileName: match.file.name,
-        helloSignFileUrl: match.file.url
+        helloSignFileUrl: match.file.url,
+        documentType:
+          getSignatureDocumentTypeFromTitle_(
+            match.file.name || sow.pendingFileName
+          )
       });
       return;
     }
@@ -80,7 +84,11 @@ function scanHelloSignRequestedSignatures_() {
       result.signed.push({
         ...sow,
         signedFileName: signedFile.name,
-        signedFileUrl: signedFile.url
+        signedFileUrl: signedFile.url,
+        documentType:
+          getSignatureDocumentTypeFromTitle_(
+            match.file.name || sow.pendingFileName
+          )
       });
     }
   });
@@ -103,7 +111,8 @@ function loadHelloSignRequestedSignatureFiles_() {
       id: file.getId(),
       name: file.getName(),
       url: file.getUrl(),
-      mimeType: file.getMimeType()
+      mimeType: file.getMimeType(),
+      documentType: getSignatureDocumentTypeFromTitle_(file.getName())
     });
   }
 
@@ -179,8 +188,13 @@ function copyHelloSignSignedSowToOfficialFolder_(helloSignFile, sow) {
   const sourceFile = DriveApp.getFileById(helloSignFile.id);
   const folder = DriveApp.getFolderById(CONTRACTOR_SIGNED_SOW_FOLDER_ID);
 
+  const documentType =
+    getSignatureDocumentTypeFromTitle_(
+      helloSignFile.name || sow.pendingFileName
+    );
+
   const signedFileName = sowSafeFileName_(
-    `Signed SOW - ${sow.projectName} - ${sow.contractorName}.pdf`
+    `Signed ${documentType} - ${sow.projectName} - ${sow.contractorName}.pdf`
   );
 
   const copiedFile = sourceFile.makeCopy(
@@ -203,7 +217,10 @@ function normalizeSowMatchText_(value) {
     .replace(/\.pdf$/g, "")
     .replace(/\bpending signature\b/g, "")
     .replace(/\bawaiting signature\b/g, "")
+    .replace(/\bsigned amendment\b/g, "")
     .replace(/\bsigned sow\b/g, "")
+    .replace(/\bamendment\b/g, "")
+    .replace(/\bamend\b/g, "")
     .replace(/\bsow\b/g, "")
     .replace(/\battachment\b/g, "")
     .replace(/\b[a-z]{3},?\s+\d{1,2}\s+[a-z]{3,9}\s+\d{4}.*$/g, "")
@@ -213,17 +230,23 @@ function normalizeSowMatchText_(value) {
 }
 
 function buildSignedSowReceivedBlocks_(item) {
+  const documentType =
+    item.documentType ||
+    getSignatureDocumentTypeFromTitle_(
+      item.signedFileName || item.pendingFileName
+    );
+
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
         text:
-          "✅ *Signed SOW received*\n\n" +
+          `✅ *Signed ${documentType} received*\n\n` +
           `*Project:* ${item.projectName}\n` +
           `*Contractor:* ${item.contractorName}\n` +
           `*Roles:* ${item.roleSummary || "-"}\n\n` +
-          "The signed SOW was saved and linked in Notion."
+          `The signed ${documentType.toLowerCase()} was saved and linked in Notion.`
       }
     }
   ];
@@ -234,15 +257,20 @@ function buildSowSignatureFolderSummaryBlocks_(result) {
     `https://drive.google.com/drive/folders/${CONTRACTOR_SOW_FOLDER_ID}`;
 
   let text =
-    "📄 *SOW Signature Summary*\n\n";
+    "📄 *Signature Summary*\n\n";
 
   if (result.pendingToSend.length) {
     text +=
-    `🔴 *Pending to send (${result.pendingToSend.length})* | <${folderUrl}|Review folder>\n`;
+      `🔴 *Pending to send (${result.pendingToSend.length})* | <${folderUrl}|Review folder>\n`;
 
     result.pendingToSend.forEach(item => {
+      const documentType =
+        item.documentType ||
+        getSignatureDocumentTypeFromTitle_(item.pendingFileName);
+
       text +=
-        `• ${item.projectName} — ${item.contractorName}` +
+        `• ${documentType} — ` +
+        `${item.projectName} — ${item.contractorName}` +
         (item.roleSummary ? ` — ${item.roleSummary}` : "") +
         "\n";
     });
@@ -251,11 +279,19 @@ function buildSowSignatureFolderSummaryBlocks_(result) {
   }
 
   if (result.awaitingSignature.length) {
-    text += `🟡 *Awaiting signature (${result.awaitingSignature.length})*\n`;
+    text +=
+      `🟡 *Awaiting signature (${result.awaitingSignature.length})*\n`;
 
     result.awaitingSignature.forEach(item => {
+      const documentType =
+        item.documentType ||
+        getSignatureDocumentTypeFromTitle_(
+          item.helloSignFileName || item.pendingFileName
+        );
+
       text +=
-        `• ${item.projectName} — ${item.contractorName}` +
+        `• ${documentType} — ` +
+        `${item.projectName} — ${item.contractorName}` +
         (item.roleSummary ? ` — ${item.roleSummary}` : "") +
         "\n";
     });
@@ -298,7 +334,7 @@ function loadPendingSignatureSows_() {
 
     const fileName = String(sowFile.name || "");
 
-    if (fileName.indexOf("Pending Signature") === -1) {
+    if (fileName.toLowerCase().indexOf("pending signature") === -1) {
       return;
     }
 
@@ -320,6 +356,7 @@ function loadPendingSignatureSows_() {
         contractorName,
         pendingFileName: sowFile.name,
         pendingFileUrl: sowFile.url,
+        documentType: getSignatureDocumentTypeFromTitle_(sowFile.name),
         roles: [],
         assignmentIds: []
       };
@@ -357,7 +394,7 @@ function trashOldPendingSowFile_(fileUrl) {
       .getFileById(fileId)
       .setTrashed(true);
   } catch (err) {
-    Logger.log(`Could not trash old pending SOW file: ${err.message}`);
+    Logger.log(`Could not trash old pending signature file: ${err.message}`);
   }
 }
 
@@ -390,4 +427,22 @@ function isSowSignatureNotificationHours_() {
   );
 
   return hour >= 9 && hour < 21;
+}
+
+function getSignatureDocumentTypeFromTitle_(title) {
+  const text =
+    String(title || "").toLowerCase();
+
+  if (
+    text.indexOf("amendment") !== -1 ||
+    text.indexOf("amend") !== -1
+  ) {
+    return "Amendment";
+  }
+
+  if (text.indexOf("sow") !== -1) {
+    return "SOW";
+  }
+
+  return "Document";
 }

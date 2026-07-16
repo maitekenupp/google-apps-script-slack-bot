@@ -129,6 +129,7 @@ function buildOperationsMenuBlocks_() {
       elements: [
         button_("📁 Portfolio Overview", "ops_workload"),
         button_("👤 Contractor Workload", "ops_contractor_workload"),
+        button_("⏱️ Request Extension", "extension_start"),
         button_("💵 Submit Invoice", "invoice_start")
       ]
     },
