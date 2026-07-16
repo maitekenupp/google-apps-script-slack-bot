@@ -981,21 +981,34 @@ function sowGetDateStart_(property) {
 }
 
 function sowToday_() {
-  return Utilities.formatDate(
-    new Date(),
-    "America/Los_Angeles",
-    "MMMM d, yyyy"
-  );
+  return new Date();
 }
 
-function sowFormatDate_(dateString) {
-  if (!dateString) return "-";
+function sowFormatDate_(value) {
+  if (!value) return "";
 
-  const date = new Date(`${dateString}T12:00:00Z`);
+  let date;
+
+  if (Object.prototype.toString.call(value) === "[object Date]") {
+    date = value;
+  } else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parts = value.split("-");
+    date = new Date(
+      Number(parts[0]),
+      Number(parts[1]) - 1,
+      Number(parts[2])
+    );
+  } else {
+    date = new Date(value);
+  }
+
+  if (isNaN(date.getTime())) {
+    return "";
+  }
 
   return Utilities.formatDate(
     date,
-    "UTC",
+    "America/Los_Angeles",
     "MMMM d, yyyy"
   );
 }

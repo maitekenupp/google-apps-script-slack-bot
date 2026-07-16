@@ -173,6 +173,15 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
+  if (actionId === "ops_projects_overview") {
+    handleProjectsOverviewButton_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
   if (actionId === "project_new") {
     startProjectFlow_(
       context.userId,
@@ -681,6 +690,15 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
+  if (actionId === "invoice_assignment_previous") {
+    handleInvoiceAssignmentPrevious_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
   if (actionId === "invoice_open_line_modal") {
     handleInvoiceOpenLineModal_(payload, channelId, messageTs, userId);
     return;
@@ -723,6 +741,34 @@ function handleIzaButtonClick_(payload) {
 
   if (actionId === "invoice_window_close") {
     handleInvoiceWindowClose_(channelId, messageTs, userId);
+    return;
+  }
+
+  if (actionId === "invoice_create_with_upload") {
+    handleInvoiceCreateConfirm_(
+      context.channelId,
+      context.messageTs,
+      context.userId,
+      true
+    );
+    return;
+  }
+
+  if (actionId === "invoice_upload_cancel") {
+    handleInvoiceUploadCancel_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "invoice_finish_review") {
+    handleInvoiceFinishReview_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
     return;
   }
 

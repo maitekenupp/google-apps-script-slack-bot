@@ -52,7 +52,7 @@ function buildProjectsOverviewReport_() {
     'No Status': '❓'
   };
 
-  let report = '📊 *Projects Overview*\n\n';
+  let report = '📋 *Projects Overview*\n\n';
 
   order.forEach(status => {
     const projects = groups[status];

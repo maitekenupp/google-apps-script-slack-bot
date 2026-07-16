@@ -83,8 +83,7 @@ function buildProjectStatusProjectSelectBlocks_(projects) {
       {
         type: "actions",
         elements: [
-          button_("⬅️ Back", "ops_projects_overview"),
-          button_("🏠 Main Menu", "menu_main")
+          button_("⬅️ Back", "ops_projects_overview")
         ]
       }
     ];
@@ -127,8 +126,7 @@ function buildProjectStatusProjectSelectBlocks_(projects) {
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "ops_projects_overview"),
-        button_("🏠 Main Menu", "menu_main")
+        button_("⬅️ Back", "ops_projects_overview")
       ]
     }
   ];
@@ -202,8 +200,7 @@ function buildProjectStatusValueSelectBlocks_(session) {
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "project_status_update_start"),
-        button_("🏠 Main Menu", "menu_main")
+        button_("⬅️ Back", "project_status_update_start")
       ]
     }
   ];
@@ -250,8 +247,8 @@ function buildProjectStatusReviewBlocks_(session) {
     {
       type: "actions",
       elements: [
-        button_("✅ Confirm Update", "project_status_confirm"),
         button_("⬅️ Back", "project_status_update_start"),
+        button_("✅ Confirm Update", "project_status_confirm"),
         button_("❌ Cancel", "project_status_cancel")
       ]
     }
@@ -300,7 +297,7 @@ function buildProjectStatusCompletedBlocks_(session) {
     {
       type: "actions",
       elements: [
-        button_("📊 Back to Overview", "ops_projects_overview"),
+        button_("📋 Back to Overview", "ops_projects_overview"),
         button_("🏠 Main Menu", "menu_main")
       ]
     }

@@ -108,6 +108,22 @@ function handleInvoiceWindowClose_(channelId, messageTs, userId) {
     ],
     "Invoice submission is now closed."
   );
+
+  const summary = buildInvoiceWindowCloseSummary_();
+
+  postSlackMessage_(
+    CONTRACTOR_CLAIMS_CHANNEL,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: summary
+        }
+      }
+    ],
+    "Invoice Window Summary"
+  );
 }
 
 /************************************
@@ -205,6 +221,76 @@ function buildInvoiceWindowModalView_(privateMetadata, window) {
   };
 }
 
+function buildInvoiceWindowCloseSummary_() {
+  const contractors = loadInvoiceExpectedContractors_();
+  const invoices = loadInvoicesForCurrentBillingMonth_();
+
+  const submittedByContractorId = {};
+
+  invoices.forEach(invoice => {
+    if (invoice.contractorId) {
+      submittedByContractorId[invoice.contractorId] = invoice;
+    }
+  });
+
+  const submitted = [];
+  const missed = [];
+
+  contractors.forEach(contractor => {
+    const invoice = submittedByContractorId[contractor.id];
+
+    if (invoice) {
+      submitted.push({
+        contractorName: contractor.name,
+        amount: invoice.totalAmount || 0
+      });
+    } else {
+      missed.push(contractor.name);
+    }
+  });
+
+  const totalSubmitted =
+    submitted.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  const billingPeriod =
+    invoiceLastDayOfCurrentMonth_();
+
+  const billingPeriodText =
+    invoiceFormatShortDate_(billingPeriod);
+
+  let text =
+    "💵 *Invoice Window Closed*\n\n" +
+    `*Billing period:* ${billingPeriodText}\n\n` +
+    "*Submitted invoices:*\n";
+
+  if (submitted.length) {
+    submitted
+      .sort((a, b) => a.contractorName.localeCompare(b.contractorName))
+      .forEach(item => {
+        text +=
+          `• ${item.contractorName}: ${invoiceFormatMoney_(item.amount)}\n`;
+      });
+  } else {
+    text += "None\n";
+  }
+
+  text +=
+    `\n*Total submitted:* ${invoiceFormatMoney_(totalSubmitted)}\n\n` +
+    "*Missed the window:*\n";
+
+  if (missed.length) {
+    missed
+      .sort()
+      .forEach(name => {
+        text += `• ${name}\n`;
+      });
+  } else {
+    text += "None 🎉\n";
+  }
+
+  return text.trim();
+}
+
 /************************************
  * WINDOW STATE
  ************************************/
@@ -278,6 +364,55 @@ function postInvoiceWindowAnnouncement_(window) {
   );
 }
 
+function runDailyInvoiceWindowReminder() {
+  const windowData = getInvoiceSubmissionWindow_();
+
+  if (!windowData || !windowData.isOpen || !windowData.endDate) {
+    return;
+  }
+
+  const today = Utilities.formatDate(
+    new Date(),
+    "America/Los_Angeles",
+    "yyyy-MM-dd"
+  );
+
+  if (windowData.endDate !== today) {
+    return;
+  }
+
+  const reminderKey =
+    `INVOICE_WINDOW_LAST_DAY_REMINDER_${windowData.endDate}`;
+
+  const props = PropertiesService.getScriptProperties();
+
+  if (props.getProperty(reminderKey)) {
+    return;
+  }
+
+  postSlackMessage_(
+    CONTRACTOR_OPPORTUNITIES_CHANNEL,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "⏰ *Invoice Submission Reminder*\n\n" +
+            "Hi everyone!\n\n" +
+            "Today is the last day to submit invoices.\n" +
+            "The submission window closes tonight at *11:59 PM PT*.\n\n" +
+            "Please submit your invoice through IZA if you have one for this billing period.\n\n" +
+            "If you already submitted your invoice, please disregard this message."
+        }
+      }
+    ],
+    "Invoice submission reminder"
+  );
+
+  props.setProperty(reminderKey, new Date().toISOString());
+}
+
 /************************************
  * HELPERS
  ************************************/
@@ -286,7 +421,7 @@ function invoiceWindowToday_() {
   return Utilities.formatDate(
     new Date(),
     "America/Los_Angeles",
-    "MMMM d, yyyy"
+    "yyyy-MM-dd"
   );
 }
 
@@ -334,4 +469,58 @@ function invoiceWindowOrdinalSuffix_(day) {
   if (lastDigit === 3) return "rd";
 
   return "th";
+}
+
+function loadInvoiceExpectedContractors_() {
+  const rows = queryAllDataSourceRows_(TEAM_DIRECTORY_DATA_SOURCE_ID);
+
+  return rows
+    .map(row => {
+      const name = getText_(row.properties["Name"]);
+      const slackId = getText_(row.properties["Slack UID"]);
+      const izaRole = getText_(row.properties["IZA Role"]);
+
+      return {
+        id: row.id,
+        name,
+        slackId,
+        izaRole
+      };
+    })
+    .filter(contractor =>
+      contractor.name &&
+      contractor.slackId &&
+      String(contractor.izaRole || "")
+      .toLowerCase()
+      .includes("contractor")
+    );
+}
+
+function loadInvoicesForCurrentBillingMonth_() {
+  const billingPeriod =
+    invoiceLastDayOfCurrentMonth_();
+
+  const rows = queryAllDataSourceRows_(CONTRACTORS_INVOICES_DATA_SOURCE_ID);
+
+  return rows
+    .map(row => {
+      const p = row.properties;
+
+      const contractorId =
+        p["Contractor"]?.relation?.[0]?.id || "";
+
+      const billingDate =
+        p["Billing Period"]?.date?.start || "";
+
+      return {
+        id: row.id,
+        contractorId,
+        billingDate,
+        totalAmount: getNumber_(p["Total Amount"])
+      };
+    })
+    .filter(invoice =>
+      invoice.contractorId &&
+      invoice.billingDate === billingPeriod
+    );
 }

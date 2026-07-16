@@ -12,6 +12,10 @@
 function runScheduledSowSignatureFolderScan() {
   const result = scanHelloSignRequestedSignatures_();
 
+  if (!isSowSignatureNotificationHours_()) {
+    return result;
+  }
+
   if (result.signed.length) {
     result.signed.forEach(item => {
       postSlackMessage_(
@@ -355,4 +359,35 @@ function trashOldPendingSowFile_(fileUrl) {
   } catch (err) {
     Logger.log(`Could not trash old pending SOW file: ${err.message}`);
   }
+}
+
+function setupSowSignatureScanTrigger() {
+  const functionName = "runScheduledSowSignatureFolderScan";
+
+  ScriptApp
+    .getProjectTriggers()
+    .forEach(trigger => {
+      if (trigger.getHandlerFunction() === functionName) {
+        ScriptApp.deleteTrigger(trigger);
+      }
+    });
+
+  ScriptApp
+    .newTrigger(functionName)
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .create();
+}
+
+function isSowSignatureNotificationHours_() {
+  const hour = Number(
+    Utilities.formatDate(
+      new Date(),
+      "America/Los_Angeles",
+      "H"
+    )
+  );
+
+  return hour >= 9 && hour < 21;
 }

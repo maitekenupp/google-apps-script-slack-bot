@@ -9,7 +9,6 @@
  ******************************************************/
 
 function handleInvoiceStart_(channelId, messageTs, userId) {
-  
   if (!isInvoiceSubmissionWindowOpen_()) {
     updateIzaMenu(
       channelId,
@@ -26,9 +25,7 @@ function handleInvoiceStart_(channelId, messageTs, userId) {
   updateIzaMenu(
     channelId,
     messageTs,
-    buildInvoiceMessageBlocks_(
-      "💵 *Submit Invoice*\n\nLoading your profile..."
-    ),
+    buildInvoiceLoadingProfileBlocks_(),
     "Loading Invoice"
   );
 
@@ -39,7 +36,8 @@ function handleInvoiceStart_(channelId, messageTs, userId) {
       channelId,
       messageTs,
       buildInvoiceMessageBlocks_(
-        "💵 *Submit Invoice*\n\nI could not find your contractor profile in Team Directory."
+        "💵 *Submit Invoice*\n\nI could not find your contractor profile in Team Directory.",
+        "menu_operations"
       ),
       "Submit Invoice"
     );
@@ -234,7 +232,7 @@ function invoiceLastDayOfCurrentMonth_() {
   return Utilities.formatDate(
     lastDay,
     "UTC",
-    "MMMM d, yyyy"
+    "yyyy-MM-dd"
   );
 }
 
@@ -308,7 +306,7 @@ function handleInvoiceRemoveLine_(payload, channelId, messageTs, userId) {
   );
 }
 
-function handleInvoiceCreateConfirm_(channelId, messageTs, userId) {
+function handleInvoiceCreateConfirm_(channelId, messageTs, userId, wantsFileUpload) {
   const session = getInvoiceSession_(userId);
 
   if (!session || !session.lineItems || !session.lineItems.length) {
@@ -326,15 +324,12 @@ function handleInvoiceCreateConfirm_(channelId, messageTs, userId) {
   updateIzaMenu(
     channelId,
     messageTs,
-    buildInvoiceMessageBlocks_(
-      "💵 *Submit Invoice*\n\nCreating your invoice PDF..."
-    ),
+    buildInvoiceCreatingPdfBlocks_(),
     "Creating Invoice"
   );
 
   const contractor = session.contractor;
   const items = session.lineItems;
-  const total = invoiceLineItemsTotal_(items);
 
   const billingPeriodRaw =
     session.billingPeriod || invoiceLastDayOfCurrentMonth_();
@@ -413,10 +408,34 @@ function handleInvoiceCreateConfirm_(channelId, messageTs, userId) {
 
   clearInvoiceSession_(userId);
 
+  if (wantsFileUpload) {
+    savePendingInvoiceUpload_(userId, {
+      invoiceId: invoice.id,
+      invoiceName: invoiceName,
+      generatedInvoiceFileName: pdfFile.name,
+      generatedInvoiceFileUrl: pdfFile.url,
+      channelId: channelId,
+      messageTs: messageTs,
+      createdAt: new Date().toISOString()
+    });
+
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildInvoiceUploadWaitingBlocks_(invoiceName),
+      "Upload Invoice File"
+    );
+
+    return;
+  }
+
   updateIzaMenu(
     channelId,
     messageTs,
-    buildInvoiceCreatedBlocks_(invoice, items, total, contractor.email),
+    buildInvoiceMessageBlocks_(
+      "✅ *Invoice Submitted*\n\n" +
+      `Your invoice PDF is ready and was shared with: ${contractor.email || "your email on file"}.`
+    ),
     "Invoice Submitted"
   );
 }
@@ -428,7 +447,8 @@ function handleInvoiceCancel_(channelId, messageTs, userId) {
     channelId,
     messageTs,
     buildInvoiceMessageBlocks_(
-      "💵 *Submit Invoice*\n\nInvoice submission canceled."
+      "💵 *Submit Invoice*\n\nInvoice submission canceled.",
+      "menu_operations"
     ),
     "Invoice Canceled"
   );
@@ -443,17 +463,43 @@ function buildInvoiceAssignmentSelectBlocks_(session) {
     item.id === session.selectedAssignmentId
   );
 
-  const text =
-    "💵 *Submit Invoice*\n\n" +
-    `*Contractor:* ${session.contractor.name}\n\n` +
-    "Select the assignment you want to bill for.";
+  if (selected) {
+    return [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "💵 *Submit Invoice*\n\n" +
+            `*Contractor:* ${session.contractor.name}\n\n` +
+            `*Selected:* ${selected.projectName} - ${selected.role}\n` +
+            `Contracted: ${selected.hours} hrs\n` +
+            `Previously billed: ${selected.billedHistorical || 0} hrs\n` +
+            `Current system billed: ${selected.billedHours || 0} hrs\n` +
+            `Remaining: ${selected.remainingHours} hrs\n` +
+            `Rate: ${invoiceFormatMoney_(selected.rate)}/hr`
+        }
+      },
+      {
+        type: "actions",
+        elements: [
+          button_("⬅️ Previous", "invoice_assignment_previous"),
+          button_("✍️ Enter Hours", "invoice_open_line_modal"),
+          button_("❌ Cancel", "invoice_cancel")
+        ]
+      }
+    ];
+  }
 
-  const blocks = [
+  return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text
+        text:
+          "💵 *Submit Invoice*\n\n" +
+          `*Contractor:* ${session.contractor.name}\n\n` +
+          "Select the assignment you want to bill for."
       }
     },
     {
@@ -477,43 +523,14 @@ function buildInvoiceAssignmentSelectBlocks_(session) {
           }))
         }
       ]
-    }
-  ];
-
-  if (selected) {
-    blocks.push({
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text:
-          `*Selected:* ${selected.projectName} - ${selected.role}\n` +
-          `Contracted: ${selected.hours} hrs\n` +
-          `Previously billed: ${selected.billedHistorical || 0} hrs\n` +
-          `Current system billed: ${selected.billedHours || 0} hrs\n` +
-          `Remaining: ${selected.remainingHours} hrs\n` +
-          `Rate: ${invoiceFormatMoney_(selected.rate)}/hr`
-      }
-    });
-
-    blocks.push({
+    },
+    {
       type: "actions",
       elements: [
-        button_("✍️ Enter Hours", "invoice_open_line_modal"),
         button_("❌ Cancel", "invoice_cancel")
       ]
-    });
-
-    return blocks;
-  }
-
-  blocks.push({
-    type: "actions",
-    elements: [
-      button_("❌ Cancel", "invoice_cancel")
-    ]
-  });
-
-  return blocks;
+    }
+  ];
 }
 
 function buildInvoiceLineModalView_(privateMetadata, session) {
@@ -615,32 +632,71 @@ function buildInvoiceReviewBlocks_(session) {
     {
       type: "actions",
       elements: [
-        button_("➕ Add Another", "invoice_add_another"),
-        button_("✅ Submit Invoice", "invoice_create_confirm"),
+        button_("➕ Add Role", "invoice_add_another"),
+        button_("✅ Finish", "invoice_finish_review")
+      ]
+    },
+    {
+      type: "actions",
+      elements: [
         button_("❌ Cancel", "invoice_cancel")
       ]
     }
   ];
 }
 
-function buildInvoiceCreatedBlocks_(invoice, items, total, contractorEmail) {
+function handleInvoiceFinishReview_(channelId, messageTs, userId) {
+  const session = getInvoiceSession_(userId);
+
+  if (!session || !session.lineItems || !session.lineItems.length) {
+    handleInvoiceStart_(channelId, messageTs, userId);
+    return;
+  }
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildInvoiceSubmitChoiceBlocks_(session),
+    "Submit Invoice"
+  );
+}
+
+function buildInvoiceSubmitChoiceBlocks_(session) {
+  const total = invoiceLineItemsTotal_(session.lineItems || []);
+
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
         text:
-          "✅ *Invoice Submitted*\n\n" +
-          "Your invoice PDF was submitted, a copy was shared with:\n" +
-          `${contractorEmail || "your email on file"}`
+          "💵 *Submit Invoice*\n\n" +
+          `*Invoice Total:* ${invoiceFormatMoney_(total)}\n\n` +
+          "*Submit Invoice* creates and submits the IZA-generated invoice PDF only.\n\n" +
+          "*Submit + Upload File* creates the IZA invoice PDF and then lets you upload your own invoice file too.\n\n" +
+          "If you upload your own invoice file, it must match the amount you declared here."
       }
     },
     {
       type: "actions",
       elements: [
-        button_("💵 Submit Another", "invoice_start"),
-        button_("🏠 Main Menu", "menu_main")
+        button_("✅ Submit Invoice", "invoice_create_confirm"),
+        button_("📎 Submit + Upload File", "invoice_create_with_upload")
       ]
+    }
+  ];
+}
+
+function buildInvoiceCreatingPdfBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "💵 *Submit Invoice*\n\n" +
+          "Creating your invoice PDF..."
+      }
     }
   ];
 }
@@ -662,6 +718,55 @@ function buildInvoiceMessageBlocks_(text, backActionId) {
           backActionId || "menu_main"
         )
       ]
+    }
+  ];
+}
+
+function buildInvoiceLoadingAvailableProjectsBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "💵 *Submit Invoice*\n\n" +
+          "Loading your available projects..."
+      }
+    }
+  ];
+}
+
+function buildInvoiceNoAvailableProjectsBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "💵 *Submit Invoice*\n\n" +
+          "I could not find available projects for invoicing."
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", "menu_operations"),
+        button_("🐞 Report Bug", "bug_report_open")
+      ]
+    }
+  ];
+}
+
+function buildInvoiceLoadingProfileBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "💵 *Submit Invoice*\n\n" +
+          "Loading your profile..."
+      }
     }
   ];
 }
@@ -847,9 +952,7 @@ function handleInvoicePayToYes_(channelId, messageTs, userId) {
   updateIzaMenu(
     channelId,
     messageTs,
-    buildInvoiceMessageBlocks_(
-      "💵 *Submit Invoice*\n\nLoading your available projects..."
-    ),
+    buildInvoiceLoadingAvailableProjectsBlocks_(),
     "Loading Invoice Projects"
   );
 
@@ -861,9 +964,7 @@ function handleInvoicePayToYes_(channelId, messageTs, userId) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildInvoiceMessageBlocks_(
-        "💵 *Submit Invoice*\n\nI could not find available projects for invoicing."
-      ),
+      buildInvoiceNoAvailableProjectsBlocks_(),
       "Submit Invoice"
     );
     return;
@@ -1077,6 +1178,25 @@ function invoiceAddDaysFromDateString_(dateString, days) {
   return Utilities.formatDate(
     date,
     "UTC",
-    "MMMM d, yyyy"
+    "yyyy-MM-dd"
+  );
+}
+
+function handleInvoiceAssignmentPrevious_(channelId, messageTs, userId) {
+  const session = getInvoiceSession_(userId);
+
+  if (!session) {
+    handleInvoiceStart_(channelId, messageTs, userId);
+    return;
+  }
+
+  session.selectedAssignmentId = null;
+  saveInvoiceSession_(userId, session);
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildInvoiceAssignmentSelectBlocks_(session),
+    "Submit Invoice"
   );
 }

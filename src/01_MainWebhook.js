@@ -132,6 +132,10 @@ function handleSlackEvent_(data) {
   const event = data.event;
 
   if (event.type === 'file_shared') {
+    if (handlePendingInvoiceUploadFromSlackFile_(event.file_id)) {
+      return;
+    }
+
     saveSlackFileToDrive(event.file_id);
     return;
   }
