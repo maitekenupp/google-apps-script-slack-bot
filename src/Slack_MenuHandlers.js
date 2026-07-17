@@ -4,13 +4,13 @@
  * File: Slack_MenuHandlers.gs
  *
  * Purpose:
- * Handles Slack messages and app mentions.
+ * Handles Slack text messages, mentions, and greetings.
  *
  * Responsibilities:
  * - Respond to @IZA mentions
  * - Respond to "Hi IZA" greetings
  * - Open DM menus
- * - Route active wizard text replies
+ * - Keep text-message routing simple
  *
  ******************************************************/
 
@@ -20,14 +20,14 @@
  ************************************/
 
 function handleIzaCommand(event) {
-  const text =
-    (event.text || "").toLowerCase();
+  const text = (event.text || "").toLowerCase();
+  const channelId = event.channel;
+  const userId = event.user;
 
-  const channelId =
-    event.channel;
-
-  const userId =
-    event.user;
+  if (isGreeting(text)) {
+    sendMainMenuToDm_(channelId, userId);
+    return;
+  }
 
   if (isManagementViewRequest_(text)) {
     sendManagementViewToDm_(channelId, userId);
@@ -43,32 +43,15 @@ function handleIzaCommand(event) {
  ************************************/
 
 function handleMenuReply(event) {
-  const text =
-    (event.text || "").trim();
+  const text = (event.text || "").trim();
+  const normalizedText = text.toLowerCase();
 
-  const normalizedText =
-    text.toLowerCase();
-
-  const channelId =
-    event.channel;
-
-  const userId =
-    event.user;
+  const channelId = event.channel;
+  const userId = event.user;
 
   const isDirectMessage =
     event.channel_type === "im" ||
     (channelId && channelId.startsWith("D"));
-
-  if (
-    handleActiveWizardReply_(
-      userId,
-      channelId,
-      text,
-      isDirectMessage
-    )
-  ) {
-    return;
-  }
 
   if (!isGreeting(normalizedText)) {
     return;
@@ -81,29 +64,7 @@ function handleMenuReply(event) {
 
   if (normalizedText.includes("iza")) {
     sendMainMenuToDm_(channelId, userId);
-    return;
   }
-}
-
-
-/************************************
- * ACTIVE WIZARD MESSAGE ROUTING
- ************************************/
-
-function handleActiveWizardReply_(userId, channelId, text, isDirectMessage) {
-  const projectSession =
-    getProjectCreationSession_(userId);
-
-  if (
-    isDirectMessage &&
-    projectSession &&
-    projectSession.status === "creating_project"
-  ) {
-    handleProjectCreationReply_(userId, channelId, text);
-    return true;
-  }
-
-  return false;
 }
 
 
@@ -112,8 +73,7 @@ function handleActiveWizardReply_(userId, channelId, text, isDirectMessage) {
  ************************************/
 
 function sendMainMenuToDm_(sourceChannelId, userId) {
-  const dmChannelId =
-    openSlackDm(userId);
+  const dmChannelId = openSlackDm(userId);
 
   sendEphemeralMessage(
     sourceChannelId,
@@ -125,26 +85,20 @@ function sendMainMenuToDm_(sourceChannelId, userId) {
 }
 
 function sendManagementViewToDm_(sourceChannelId, userId) {
-  const dmChannelId =
-    openSlackDm(userId);
+  const dmChannelId = openSlackDm(userId);
 
   sendEphemeralMessage(
     sourceChannelId,
     userId,
-    "Got it 👋 I’ll send this in DM."
+    "Got it 👋 I'll send this in DM."
   );
+
+  const report = buildManagementView();
 
   sendSlackMessage(
     dmChannelId,
-    "📊 Sure thing. Give me a moment while I review the Notion tables..."
+    report.summary
   );
-
-  const reports =
-    buildManagementViewSections();
-
-  reports.forEach(message => {
-    sendSlackMessage(dmChannelId, message);
-  });
 }
 
 
