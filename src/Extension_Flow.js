@@ -6,7 +6,18 @@
  * Purpose:
  * Contractor hours extension request flow.
  *
+ * Contractor menu:
+ * Operations > Request Extension
+ *
+ * Admin review:
+ * Extension requests are posted to the claims/admin channel.
+ *
  ******************************************************/
+
+
+/************************************
+ * START CONTRACTOR FLOW
+ ************************************/
 
 function handleExtensionStart_(channelId, messageTs, userId) {
   updateIzaMenu(
@@ -29,6 +40,8 @@ function handleExtensionStart_(channelId, messageTs, userId) {
     );
     return;
   }
+
+  contractor.slackId = userId;
 
   const history =
     loadExtensionRequestHistoryForContractor_(contractor.id);
@@ -65,34 +78,43 @@ function handleExtensionStart_(channelId, messageTs, userId) {
   );
 }
 
-function handleExtensionAssignmentSelect_(payload, channelId, messageTs, userId) {
-  const session = getExtensionSession_(userId);
-
-  if (!session) {
-    updateIzaMenu(
-      channelId,
-      messageTs,
-      buildExtensionMessageBlocks_(
-        "⏱️ *Request Extension*\n\nI could not find your extension session. Please start again."
-      ),
-      "Request Extension"
-    );
-    return;
-  }
-
-  const selected =
-    payload.actions?.[0]?.selected_option?.value || "";
-
-  session.selectedAssignmentId = selected;
-  saveExtensionSession_(userId, session);
-
-  updateIzaMenu(
-    channelId,
-    messageTs,
-    buildExtensionAssignmentSelectedBlocks_(session),
-    "Request Extension"
-  );
+function buildExtensionLoadingBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "⏱️ *Request Extension*\n\n" +
+          "Loading your active assignments..."
+      }
+    }
+  ];
 }
+
+function buildExtensionMessageBlocks_(text) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", "menu_operations"),
+        button_("🐞 Report Bug", "bug_report")
+      ]
+    }
+  ];
+}
+
+
+/************************************
+ * LOAD AVAILABLE ASSIGNMENTS
+ ************************************/
 
 function loadExtensionAssignmentsForContractor_(contractor) {
   const assignmentRows =
@@ -104,46 +126,9 @@ function loadExtensionAssignmentsForContractor_(contractor) {
   const pendingRequestRows =
     queryAllDataSourceRows_(CONTRACTOR_EXTENSION_REQUESTS_DATA_SOURCE_ID);
 
-  const projectsById = {};
-
-  projectRows.forEach(row => {
-    projectsById[row.id] = {
-      id: row.id,
-      name:
-        getText_(row.properties["Project Name"]) ||
-        "Project",
-      status:
-        getText_(row.properties["Project Status"]) ||
-        ""
-    };
-  });
-
-  const pendingAssignmentIds = {};
-
-  pendingRequestRows.forEach(row => {
-    const p = row.properties;
-
-    const status =
-      getText_(p["Status"]);
-
-    if (status !== "Pending") {
-      return;
-    }
-
-    const contractorId =
-      p["Contractor"]?.relation?.[0]?.id || "";
-
-    if (contractorId !== contractor.id) {
-      return;
-    }
-
-    const assignmentId =
-      p["Assignment"]?.relation?.[0]?.id || "";
-
-    if (assignmentId) {
-      pendingAssignmentIds[assignmentId] = true;
-    }
-  });
+  const projectsById = buildExtensionProjectsById_(projectRows);
+  const pendingAssignmentIds =
+    buildPendingExtensionAssignmentIds_(pendingRequestRows, contractor.id);
 
   const assignments = [];
 
@@ -200,6 +185,7 @@ function loadExtensionAssignmentsForContractor_(contractor) {
       assignmentId: row.id,
       contractorId: contractor.id,
       contractorName: contractor.name,
+      contractorSlackId: contractor.slackId || "",
       projectId: project.id,
       projectName: project.name,
       projectStatus: project.status,
@@ -219,37 +205,87 @@ function loadExtensionAssignmentsForContractor_(contractor) {
     );
 }
 
-function buildExtensionLoadingBlocks_() {
-  return [
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text:
-          "⏱️ *Request Extension*\n\n" +
-          "Loading your active assignments..."
-      }
-    }
-  ];
+function buildExtensionProjectsById_(projectRows) {
+  const projectsById = {};
+
+  projectRows.forEach(row => {
+    projectsById[row.id] = {
+      id: row.id,
+      name:
+        getText_(row.properties["Project Name"]) ||
+        "Project",
+      status:
+        getText_(row.properties["Project Status"]) ||
+        ""
+    };
+  });
+
+  return projectsById;
 }
 
-function buildExtensionMessageBlocks_(text) {
-  return [
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text
-      }
-    },
-    {
-      type: "actions",
-      elements: [
-        button_("⬅️ Back", "menu_operations"),
-        button_("🐞 Report Bug", "bug_report_open")
-      ]
+function buildPendingExtensionAssignmentIds_(pendingRequestRows, contractorId) {
+  const pendingAssignmentIds = {};
+
+  pendingRequestRows.forEach(row => {
+    const p = row.properties;
+
+    const status =
+      getText_(p["Status"]);
+
+    if (status !== "Pending") {
+      return;
     }
-  ];
+
+    const rowContractorId =
+      p["Contractor"]?.relation?.[0]?.id || "";
+
+    if (rowContractorId !== contractorId) {
+      return;
+    }
+
+    const assignmentId =
+      p["Assignment"]?.relation?.[0]?.id || "";
+
+    if (assignmentId) {
+      pendingAssignmentIds[assignmentId] = true;
+    }
+  });
+
+  return pendingAssignmentIds;
+}
+
+
+/************************************
+ * ASSIGNMENT SELECTION
+ ************************************/
+
+function handleExtensionAssignmentSelect_(payload, channelId, messageTs, userId) {
+  const session = getExtensionSession_(userId);
+
+  if (!session) {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildExtensionMessageBlocks_(
+        "⏱️ *Request Extension*\n\nI could not find your extension session. Please start again."
+      ),
+      "Request Extension"
+    );
+    return;
+  }
+
+  const selected =
+    payload.actions?.[0]?.selected_option?.value || "";
+
+  session.selectedAssignmentId = selected;
+  saveExtensionSession_(userId, session);
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildExtensionAssignmentSelectedBlocks_(session),
+    "Request Extension"
+  );
 }
 
 function buildExtensionAssignmentSelectBlocks_(session) {
@@ -274,17 +310,6 @@ function buildExtensionAssignmentSelectBlocks_(session) {
   });
 
   if (hasAssignments) {
-    const options = session.assignments
-      .slice(0, 100)
-      .map(assignment => ({
-        text: {
-          type: "plain_text",
-          text: `${assignment.projectName} - ${assignment.role}`.substring(0, 75),
-          emoji: true
-        },
-        value: assignment.assignmentId
-      }));
-
     blocks.push({
       type: "actions",
       elements: [
@@ -296,7 +321,16 @@ function buildExtensionAssignmentSelectBlocks_(session) {
             text: "Select assignment",
             emoji: true
           },
-          options
+          options: session.assignments
+            .slice(0, 100)
+            .map(assignment => ({
+              text: {
+                type: "plain_text",
+                text: extensionOptionText_(assignment),
+                emoji: true
+              },
+              value: assignment.assignmentId
+            }))
         }
       ]
     });
@@ -344,7 +378,7 @@ function buildExtensionAssignmentSelectedBlocks_(session) {
       elements: [
         button_("⬅️ Previous", "extension_previous"),
         button_("📝 Request Hours", "extension_open_modal"),
-        button_("❌ Cancel", "extension_cancel")
+        dangerButton_("❌ Cancel", "extension_cancel")
       ]
     }
   ];
@@ -389,29 +423,19 @@ function getSelectedExtensionAssignment_(session) {
   );
 }
 
-function saveExtensionSession_(userId, session) {
-  PropertiesService
-    .getScriptProperties()
-    .setProperty(
-      `EXTENSION_SESSION_${userId}`,
-      JSON.stringify(session)
-    );
+function extensionOptionText_(assignment) {
+  const text =
+    `${assignment.projectName} - ${assignment.role}`;
+
+  return text.length > 75
+    ? text.substring(0, 72) + "..."
+    : text;
 }
 
-function getExtensionSession_(userId) {
-  const raw =
-    PropertiesService
-      .getScriptProperties()
-      .getProperty(`EXTENSION_SESSION_${userId}`);
 
-  return raw ? JSON.parse(raw) : null;
-}
-
-function clearExtensionSession_(userId) {
-  PropertiesService
-    .getScriptProperties()
-    .deleteProperty(`EXTENSION_SESSION_${userId}`);
-}
+/************************************
+ * REQUEST MODAL
+ ************************************/
 
 function handleExtensionOpenModal_(payload, userId) {
   const session = getExtensionSession_(userId);
@@ -586,6 +610,34 @@ function handleExtensionRequestModalSubmit_(payload) {
   };
 }
 
+function buildExtensionSubmittedBlocks_(assignment, requestedHours) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "✅ *Extension request submitted*\n\n" +
+          `*Project:* ${assignment.projectName}\n` +
+          `*Role:* ${assignment.role}\n` +
+          `*Requested extra hours:* ${requestedHours}\n\n` +
+          "Your request was sent for review."
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", "menu_operations")
+      ]
+    }
+  ];
+}
+
+
+/************************************
+ * CREATE REQUEST IN NOTION
+ ************************************/
+
 function createContractorExtensionRequest_(
     contractor,
     assignment,
@@ -696,6 +748,11 @@ function createContractorExtensionRequest_(
   );
 }
 
+
+/************************************
+ * ADMIN NOTIFICATION
+ ************************************/
+
 function postExtensionRequestAdminMessage_(
     request,
     contractor,
@@ -735,7 +792,7 @@ function postExtensionRequestAdminMessage_(
             type: "button",
             text: {
               type: "plain_text",
-              text: "✅ Approve",
+              text: "Approve",
               emoji: true
             },
             style: "primary",
@@ -756,7 +813,7 @@ function postExtensionRequestAdminMessage_(
             type: "button",
             text: {
               type: "plain_text",
-              text: "❌ Deny",
+              text: "Deny",
               emoji: true
             },
             style: "danger",
@@ -769,7 +826,8 @@ function postExtensionRequestAdminMessage_(
               contractorSlackId: contractor.slackId || "",
               projectId: assignment.projectId,
               projectName: assignment.projectName,
-              role: assignment.role
+              role: assignment.role,
+              requestedHours
             })
           }
         ]
@@ -814,29 +872,10 @@ function saveExtensionAdminMessageLocation_(requestId, channelId, messageTs) {
   );
 }
 
-function buildExtensionSubmittedBlocks_(assignment, requestedHours) {
-  return [
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text:
-          "✅ *Extension request submitted*\n\n" +
-          `*Project:* ${assignment.projectName}\n` +
-          `*Role:* ${assignment.role}\n` +
-          `*Requested extra hours:* ${requestedHours}\n\n` +
-          "Your request was sent for review."
-      }
-    },
-    {
-      type: "actions",
-      elements: [
-        button_("⬅️ Back", "menu_operations"),
-        button_("👋 Bye IZA", "menu_close")
-      ]
-    }
-  ];
-}
+
+/************************************
+ * APPROVE REQUEST
+ ************************************/
 
 function handleExtensionApprove_(channelId, messageTs, adminUserId, value) {
   const data = JSON.parse(value);
@@ -856,19 +895,7 @@ function handleExtensionApprove_(channelId, messageTs, adminUserId, value) {
   updateIzaMenu(
     channelId,
     messageTs,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "⏳ *Approving extension request...*\n\n" +
-            `*Project:* ${data.projectName}\n` +
-            `*Contractor:* ${data.contractorName}\n` +
-            `*Role:* ${data.role}`
-        }
-      }
-    ],
+    buildExtensionApprovingBlocks_(data),
     "Approving Extension"
   );
 
@@ -878,61 +905,35 @@ function handleExtensionApprove_(channelId, messageTs, adminUserId, value) {
   const assignmentDetails =
     getExtensionAssignmentDetails_(data.assignmentId);
 
-  const projectDetails =
-    getExtensionProjectDetails_(
-      data.projectId || assignmentDetails.projectId
-    );
+  const contractorDetails =
+    getExtensionContractorDetails_(data.contractorId);
 
-  const originalHours =
-    Number(assignmentDetails.contractedHours || 0);
+  const projectDetails =
+    getExtensionProjectDetails_(data.projectId);
 
   const additionalHours =
-    Number(requestDetails.requestedHours || 0);
+    Number(requestDetails.requestedHours || data.requestedHours || 0);
 
   const newTotalHours =
-    originalHours + additionalHours;
+    Number(assignmentDetails.contractedHours || 0) + additionalHours;
 
-  const hourlyRate =
-    Number(assignmentDetails.rate || 0);
-
-  const totalCompensationCap =
-    newTotalHours * hourlyRate;
-
-  const draftFile =
-    createContractorAmendmentDraft_({
-      contractorName: data.contractorName,
-      projectName: data.projectName,
-      startDate: extensionFormatDate_(projectDetails.startDate),
-      date: extensionFormatDate_(new Date()),
-      role: data.role,
-      reason: requestDetails.reason,
-      originalHours,
-      additionalHours,
-      newTotalHours,
-      hourlyRate,
-      totalCompensationCap
-    });
+  const draftFile = createContractorAmendmentDraft_({
+    contractorName: contractorDetails.name || data.contractorName,
+    projectName: data.projectName,
+    startDate: extensionFormatDate_(projectDetails.startDate),
+    date: extensionFormatDate_(new Date()),
+    role: data.role,
+    reason: requestDetails.reason || "",
+    originalHours: assignmentDetails.contractedHours,
+    additionalHours,
+    newTotalHours,
+    hourlyRate: assignmentDetails.rate,
+    totalCompensationCap: newTotalHours * assignmentDetails.rate
+  });
 
   updateContractorAssignmentHours_(
     data.assignmentId,
     newTotalHours
-  );
-
-  addNotionCommentToPage_(
-    data.assignmentId,
-    [
-      "Hours extension approved by IZA.",
-      "",
-      `Previous hours: ${originalHours}`,
-      `Added hours: ${additionalHours}`,
-      `New total hours: ${newTotalHours}`,
-      "",
-      "Reason:",
-      requestDetails.reason || "-",
-      "",
-      `Approved by: <@${adminUserId}>`,
-      `Date: ${extensionFormatDate_(new Date())}`
-    ].join("\n")
   );
 
   updateExtensionRequestAfterApproval_(
@@ -941,8 +942,13 @@ function handleExtensionApprove_(channelId, messageTs, adminUserId, value) {
     draftFile
   );
 
+  addNotionCommentToPage_(
+    data.assignmentId,
+    `Hours extension approved. Added ${additionalHours} hours. New total: ${newTotalHours} hours.`
+  );
+
   notifyExtensionApproved_(
-    data.contractorSlackId,
+    data.contractorSlackId || contractorDetails.slackId,
     data.projectName,
     data.role,
     additionalHours,
@@ -953,7 +959,10 @@ function handleExtensionApprove_(channelId, messageTs, adminUserId, value) {
     channelId,
     messageTs,
     buildExtensionApprovedBlocks_(
-      data,
+      {
+        ...data,
+        contractorName: contractorDetails.name || data.contractorName
+      },
       additionalHours,
       newTotalHours,
       draftFile
@@ -962,445 +971,20 @@ function handleExtensionApprove_(channelId, messageTs, adminUserId, value) {
   );
 }
 
-function buildExtensionNoLongerPendingBlocks_(request) {
-  const status =
-    request?.status || "Unknown";
-
+function buildExtensionApprovingBlocks_(data) {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
         text:
-          "⚪ *This extension request is no longer pending.*\n\n" +
-          `*Current status:* ${status}`
+          "⏳ *Approving extension request...*\n\n" +
+          `*Project:* ${data.projectName}\n` +
+          `*Contractor:* ${data.contractorName}\n` +
+          `*Role:* ${data.role}`
       }
-    },
-    {
-      type: "actions",
-      elements: [
-        button_("👋 Bye IZA", "menu_close")
-      ]
     }
   ];
-}
-
-function handleExtensionDeny_(channelId, messageTs, adminUserId, value) {
-  const data = JSON.parse(value);
-
-  const statusCheck =
-    getExtensionRequestFullDetails_(data.requestId);
-
-  if (!statusCheck || statusCheck.status !== "Pending") {
-    updateIzaMenu(
-      channelId,
-      messageTs,
-      buildExtensionNoLongerPendingBlocks_(statusCheck),
-      "Extension Not Pending"
-    );
-    return;
-  }
-
-  const requestDetails =
-    getExtensionRequestDetails_(data.requestId);
-
-  const contractor =
-    getExtensionContractorDetails_(data.contractorId);
-
-  updateExtensionRequestAfterDenial_(
-    data.requestId,
-    adminUserId
-  );
-
-  addNotionCommentToPage_(
-    data.assignmentId,
-    [
-      "Hours extension request denied by IZA.",
-      "",
-      `Requested extra hours: ${requestDetails.requestedHours}`,
-      "",
-      "Reason provided:",
-      requestDetails.reason || "-",
-      "",
-      `Denied by: <@${adminUserId}>`,
-      `Date: ${extensionFormatDate_(new Date())}`
-    ].join("\n")
-  );
-
-  notifyExtensionDenied_(
-    contractor.slackId || data.contractorSlackId,
-    data.projectName,
-    data.role
-  );
-
-  updateIzaMenu(
-    channelId,
-    messageTs,
-    buildExtensionDeniedBlocks_(
-      data,
-      requestDetails.requestedHours
-    ),
-    "Extension Denied"
-  );
-}
-
-function getExtensionContractorDetails_(contractorId) {
-  if (!contractorId) {
-    return {};
-  }
-
-  const page =
-    notionFetch_(
-      `https://api.notion.com/v1/pages/${contractorId}`,
-      "get"
-    );
-
-  const p = page.properties;
-
-  return {
-    id: page.id,
-    name:
-      getText_(p["Name"]) || "",
-    slackId:
-      getText_(p["Slack UID"]) || "",
-    email:
-      getText_(p["Email"]) || ""
-  };
-}
-
-function getExtensionRequestDetails_(requestId) {
-  const page =
-    notionFetch_(
-      `https://api.notion.com/v1/pages/${requestId}`,
-      "get"
-    );
-
-  const p = page.properties;
-
-  return {
-    id: page.id,
-    requestedHours:
-      getNumber_(p["Requested Extra Hours"]),
-    reason:
-      getText_(p["Reason"])
-  };
-}
-
-function getExtensionAssignmentDetails_(assignmentId) {
-  const page =
-    notionFetch_(
-      `https://api.notion.com/v1/pages/${assignmentId}`,
-      "get"
-    );
-
-  const p = page.properties;
-
-  return {
-    id: page.id,
-    contractedHours:
-      getNumber_(p["Hours to Contractor"]),
-    rate:
-      getNumber_(p["Rate per Hour"]),
-    projectId:
-      p["Projects 1 related to"]?.relation?.[0]?.id || ""
-  };
-}
-
-function getExtensionProjectDetails_(projectId) {
-  if (!projectId) {
-    return {
-      startDate: ""
-    };
-  }
-
-  const page =
-    notionFetch_(
-      `https://api.notion.com/v1/pages/${projectId}`,
-      "get"
-    );
-
-  const p = page.properties;
-
-  return {
-    id: page.id,
-    startDate:
-      p["Project Start Date"]?.date?.start || ""
-  };
-}
-
-function updateContractorAssignmentHours_(assignmentId, newTotalHours) {
-  return notionFetch_(
-    `https://api.notion.com/v1/pages/${assignmentId}`,
-    "patch",
-    {
-      properties: {
-        "Hours to Contractor": {
-          number: newTotalHours
-        }
-      }
-    }
-  );
-}
-
-function updateExtensionRequestAfterApproval_(requestId, adminUserId, draftFile) {
-  saveExtensionAmendmentDraft_(requestId, draftFile);
-
-  return notionFetch_(
-    `https://api.notion.com/v1/pages/${requestId}`,
-    "patch",
-    {
-      properties: {
-        "Status": {
-          select: {
-            name: "Approved"
-          }
-        },
-        "Reviewed Date": {
-          date: {
-            start: new Date().toISOString().slice(0, 10)
-          }
-        },
-        "Reviewed By": {
-          rich_text: [
-            {
-              text: {
-                content: `<@${adminUserId}>`
-              }
-            }
-          ]
-        }
-      }
-    }
-  );
-}
-
-function saveExtensionAmendmentDraft_(requestId, draftFile) {
-  PropertiesService
-    .getScriptProperties()
-    .setProperty(
-      `EXTENSION_AMENDMENT_DRAFT_${requestId}`,
-      JSON.stringify(draftFile)
-    );
-}
-
-function getExtensionAmendmentDraft_(requestId) {
-  const raw =
-    PropertiesService
-      .getScriptProperties()
-      .getProperty(`EXTENSION_AMENDMENT_DRAFT_${requestId}`);
-
-  return raw ? JSON.parse(raw) : null;
-}
-
-function clearExtensionAmendmentDraft_(requestId) {
-  PropertiesService
-    .getScriptProperties()
-    .deleteProperty(`EXTENSION_AMENDMENT_DRAFT_${requestId}`);
-}
-
-function updateExtensionRequestAfterDenial_(requestId, adminUserId) {
-  return notionFetch_(
-    `https://api.notion.com/v1/pages/${requestId}`,
-    "patch",
-    {
-      properties: {
-        "Status": {
-          select: {
-            name: "Denied"
-          }
-        },
-        "Reviewed Date": {
-          date: {
-            start: new Date().toISOString().slice(0, 10)
-          }
-        },
-        "Reviewed By": {
-          rich_text: [
-            {
-              text: {
-                content: `<@${adminUserId}>`
-              }
-            }
-          ]
-        }
-      }
-    }
-  );
-}
-
-function addNotionCommentToPage_(pageId, text) {
-  try {
-    return notionFetch_(
-      "https://api.notion.com/v1/comments",
-      "post",
-      {
-        parent: {
-          page_id: pageId
-        },
-        rich_text: [
-          {
-            type: "text",
-            text: {
-              content: text
-            }
-          }
-        ]
-      }
-    );
-  } catch (err) {
-    Logger.log(
-      "Could not add Notion comment: " + err.message
-    );
-
-    return null;
-  }
-}
-
-function createContractorAmendmentDraft_(amendmentData) {
-  const templateFile =
-    DriveApp.getFileById(CONTRACTOR_AMENDMENT_TEMPLATE_DOC_ID);
-
-  const folder =
-    DriveApp.getFolderById(CONTRACTOR_SOW_FOLDER_ID);
-
-  const fileName =
-    extensionSafeFileName_(
-      `Amendment Draft - ${amendmentData.projectName} - ${amendmentData.contractorName} - ${amendmentData.role}`
-    );
-
-  const copiedDoc =
-    templateFile.makeCopy(fileName, folder);
-
-  const doc =
-    DocumentApp.openById(copiedDoc.getId());
-
-  const body =
-    doc.getBody();
-
-  fillContractorAmendmentDocument_(body, amendmentData);
-
-  doc.saveAndClose();
-
-  return {
-    id: copiedDoc.getId(),
-    name: copiedDoc.getName(),
-    url: copiedDoc.getUrl()
-  };
-}
-
-function fillContractorAmendmentDocument_(body, amendmentData) {
-  replaceExtensionPlaceholder_(body, "{{Contractor Name}}", amendmentData.contractorName);
-  replaceExtensionPlaceholder_(body, "{{Project Name}}", amendmentData.projectName);
-  replaceExtensionPlaceholder_(body, "{{Start Date}}", amendmentData.startDate);
-  replaceExtensionPlaceholder_(body, "{{Date}}", amendmentData.date);
-  replaceExtensionPlaceholder_(body, "{{Role}}", amendmentData.role);
-  replaceExtensionPlaceholder_(body, "{{Reason}}", amendmentData.reason);
-
-  replaceExtensionPlaceholder_(body, "{{Original Hours}}", String(amendmentData.originalHours));
-  replaceExtensionPlaceholder_(body, "{{Additional Hours}}", String(amendmentData.additionalHours));
-  replaceExtensionPlaceholder_(body, "{{New Total Hours}}", String(amendmentData.newTotalHours));
-
-  replaceExtensionPlaceholder_(body, "{{Hourly Rate}}", extensionFormatMoney_(amendmentData.hourlyRate));
-  replaceExtensionPlaceholder_(body, "{{Total Compensation Cap}}", extensionFormatMoney_(amendmentData.totalCompensationCap));
-}
-
-function replaceExtensionPlaceholder_(element, placeholder, value) {
-  element.replaceText(
-    extensionEscapeRegex_(placeholder),
-    value || ""
-  );
-}
-
-function extensionEscapeRegex_(text) {
-  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function extensionFormatDate_(value) {
-  if (!value) return "";
-
-  let date;
-
-  if (Object.prototype.toString.call(value) === "[object Date]") {
-    date = value;
-  } else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const parts = value.split("-");
-    date = new Date(
-      Number(parts[0]),
-      Number(parts[1]) - 1,
-      Number(parts[2])
-    );
-  } else {
-    date = new Date(value);
-  }
-
-  if (isNaN(date.getTime())) {
-    return "";
-  }
-
-  return Utilities.formatDate(
-    date,
-    "America/Los_Angeles",
-    "MMMM d, yyyy"
-  );
-}
-
-function extensionFormatMoney_(value) {
-  return "$" + Number(value || 0).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-}
-
-function extensionSafeFileName_(name) {
-  return String(name || "Amendment")
-    .replace(/[\\/:*?"<>|]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function notifyExtensionApproved_(
-    contractorSlackId,
-    projectName,
-    role,
-    additionalHours,
-    newTotalHours
-  ) {
-  if (!contractorSlackId) return;
-
-  const dmChannelId =
-    openSlackDm(contractorSlackId);
-
-  sendSlackMessage(
-    dmChannelId,
-    [
-      `Hi <@${contractorSlackId}> 👋`,
-      "",
-      `Good news — your extension request for *${role}* on *${projectName}* was approved.`,
-      "",
-      `*Additional approved hours:* ${additionalHours}`,
-      `*New total hours:* ${newTotalHours}`,
-      "",
-      "The amendment draft is being prepared and will be finalized by the team."
-    ].join("\n")
-  );
-}
-
-function notifyExtensionDenied_(contractorSlackId, projectName, role) {
-  if (!contractorSlackId) return;
-
-  const dmChannelId =
-    openSlackDm(contractorSlackId);
-
-  sendSlackMessage(
-    dmChannelId,
-    [
-      `Hi <@${contractorSlackId}> 👋`,
-      "",
-      `Your extension request for *${role}* on *${projectName}* was not approved at this time.`,
-      "",
-      "We’ll contact you personally to review the situation."
-    ].join("\n")
-  );
 }
 
 function buildExtensionApprovedBlocks_(
@@ -1449,6 +1033,100 @@ function buildExtensionApprovedBlocks_(
     }
   ];
 }
+
+
+/************************************
+ * DENY REQUEST
+ ************************************/
+
+function handleExtensionDeny_(channelId, messageTs, adminUserId, value) {
+  const data = JSON.parse(value);
+  const statusCheck =
+    getExtensionRequestFullDetails_(data.requestId);
+
+  if (!statusCheck || statusCheck.status !== "Pending") {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildExtensionNoLongerPendingBlocks_(statusCheck),
+      "Extension Not Pending"
+    );
+    return;
+  }
+
+  const requestDetails =
+    getExtensionRequestDetails_(data.requestId);
+
+  const contractorDetails =
+    getExtensionContractorDetails_(data.contractorId);
+
+  const requestedHours =
+    requestDetails.requestedHours || data.requestedHours || "-";
+
+  updateExtensionRequestAfterDenial_(
+    data.requestId,
+    adminUserId
+  );
+
+  notifyExtensionDenied_(
+    data.contractorSlackId || contractorDetails.slackId,
+    data.projectName,
+    data.role
+  );
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildExtensionDeniedBlocks_(
+      {
+        ...data,
+        contractorName: contractorDetails.name || data.contractorName
+      },
+      requestedHours
+    ),
+    "Extension Denied"
+  );
+}
+
+function buildExtensionDeniedBlocks_(data, requestedHours) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "🔴 *Extension Denied*\n\n" +
+          `*Contractor:* ${data.contractorName}\n` +
+          `*Project:* ${data.projectName}\n` +
+          `*Role:* ${data.role}\n` +
+          `*Requested extra hours:* ${requestedHours || "-"}\n\n` +
+          "The contractor was notified."
+      }
+    }
+  ];
+}
+
+function buildExtensionNoLongerPendingBlocks_(request) {
+  const status =
+    request?.status || "not pending";
+
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "⚪ *Extension request already reviewed*\n\n" +
+          `Current status: *${status}*`
+      }
+    }
+  ];
+}
+
+
+/************************************
+ * AMENDMENT PDF
+ ************************************/
 
 function handleExtensionFinalizeAmendment_(
     channelId,
@@ -1534,6 +1212,54 @@ function handleExtensionFinalizeAmendment_(
   );
 }
 
+function createContractorAmendmentDraft_(amendmentData) {
+  const templateFile =
+    DriveApp.getFileById(CONTRACTOR_AMENDMENT_TEMPLATE_DOC_ID);
+
+  const folder =
+    DriveApp.getFolderById(CONTRACTOR_SOW_FOLDER_ID);
+
+  const fileName =
+    extensionSafeFileName_(
+      `Amendment Draft - ${amendmentData.projectName} - ${amendmentData.contractorName} - ${amendmentData.role}`
+    );
+
+  const copiedDoc =
+    templateFile.makeCopy(fileName, folder);
+
+  const doc =
+    DocumentApp.openById(copiedDoc.getId());
+
+  const body =
+    doc.getBody();
+
+  fillContractorAmendmentDocument_(body, amendmentData);
+
+  doc.saveAndClose();
+
+  return {
+    id: copiedDoc.getId(),
+    name: copiedDoc.getName(),
+    url: copiedDoc.getUrl()
+  };
+}
+
+function fillContractorAmendmentDocument_(body, amendmentData) {
+  replaceExtensionPlaceholder_(body, "{{Contractor Name}}", amendmentData.contractorName);
+  replaceExtensionPlaceholder_(body, "{{Project Name}}", amendmentData.projectName);
+  replaceExtensionPlaceholder_(body, "{{Start Date}}", amendmentData.startDate);
+  replaceExtensionPlaceholder_(body, "{{Date}}", amendmentData.date);
+  replaceExtensionPlaceholder_(body, "{{Role}}", amendmentData.role);
+  replaceExtensionPlaceholder_(body, "{{Reason}}", amendmentData.reason);
+
+  replaceExtensionPlaceholder_(body, "{{Original Hours}}", String(amendmentData.originalHours));
+  replaceExtensionPlaceholder_(body, "{{Additional Hours}}", String(amendmentData.additionalHours));
+  replaceExtensionPlaceholder_(body, "{{New Total Hours}}", String(amendmentData.newTotalHours));
+
+  replaceExtensionPlaceholder_(body, "{{Hourly Rate}}", extensionFormatMoney_(amendmentData.hourlyRate));
+  replaceExtensionPlaceholder_(body, "{{Total Compensation Cap}}", extensionFormatMoney_(amendmentData.totalCompensationCap));
+}
+
 function finalizeContractorAmendmentPdf_(
     draftDocId,
     projectName,
@@ -1567,36 +1293,6 @@ function finalizeContractorAmendmentPdf_(
   };
 }
 
-function updateExtensionRequestAmendmentFile_(requestId, pdfFile) {
-  return notionFetch_(
-    `https://api.notion.com/v1/pages/${requestId}`,
-    "patch",
-    {
-      properties: {
-        "Amendment File": {
-          files: [
-            {
-              name: pdfFile.name,
-              type: "external",
-              external: {
-                url: pdfFile.url
-              }
-            }
-          ]
-        }
-      }
-    }
-  );
-}
-
-function trashDriveFileById_(fileId) {
-  if (!fileId) return;
-
-  DriveApp
-    .getFileById(fileId)
-    .setTrashed(true);
-}
-
 function buildExtensionAmendmentFinalizedBlocks_(data, pdfFile) {
   const requestedHours =
     data.requestedHours || data.additionalHours || "-";
@@ -1623,23 +1319,10 @@ function buildExtensionAmendmentFinalizedBlocks_(data, pdfFile) {
   ];
 }
 
-function buildExtensionDeniedBlocks_(data, requestedHours) {
-  return [
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text:
-          "🔴 *Extension Denied*\n\n" +
-          `*Contractor:* ${data.contractorName}\n` +
-          `*Project:* ${data.projectName}\n` +
-          `*Role:* ${data.role}\n` +
-          `*Requested extra hours:* ${requestedHours || "-"}\n\n` +
-          "The contractor was notified."
-      }
-    }
-  ];
-}
+
+/************************************
+ * HISTORY + CONTRACTOR CANCEL
+ ************************************/
 
 function loadExtensionRequestHistoryForContractor_(contractorId) {
   const rows =
@@ -1660,39 +1343,29 @@ function loadExtensionRequestHistoryForContractor_(contractorId) {
     const status =
       getText_(p["Status"]) || "Pending";
 
-    const projectName =
-      getText_(p["Project Name"]) ||
-      getRelationDisplayName_(p["Project"]) ||
-      "Project";
-
-    const contractorName =
-      getText_(p["Contractor Name"]) ||
-      getRelationDisplayName_(p["Contractor"]) ||
-      "Contractor";
-
-    const role =
-      getText_(p["Role"]) || "Role";
-
-    const requestedHours =
-      getNumber_(p["Requested Extra Hours"]);
-
-    const requestedDate =
-      p["Requested Date"]?.date?.start || "";
-
-    const reviewedDate =
-      p["Reviewed Date"]?.date?.start || "";
-
     history.push({
       requestId: row.id,
       status,
-      projectName,
-      contractorName,
-      role,
-      requestedHours,
-      requestedDate,
-      reviewedDate,
-      adminChannelId: getText_(p["Admin Channel ID"]),
-      adminMessageTs: getText_(p["Admin Message TS"])
+      projectName:
+        getText_(p["Project Name"]) ||
+        getRelationDisplayName_(p["Project"]) ||
+        "Project",
+      contractorName:
+        getText_(p["Contractor Name"]) ||
+        getRelationDisplayName_(p["Contractor"]) ||
+        "Contractor",
+      role:
+        getText_(p["Role"]) || "Role",
+      requestedHours:
+        getNumber_(p["Requested Extra Hours"]),
+      requestedDate:
+        p["Requested Date"]?.date?.start || "",
+      reviewedDate:
+        p["Reviewed Date"]?.date?.start || "",
+      adminChannelId:
+        getText_(p["Admin Channel ID"]),
+      adminMessageTs:
+        getText_(p["Admin Message TS"])
     });
   });
 
@@ -1850,6 +1523,34 @@ function handleExtensionCancelRequest_(
   handleExtensionStart_(channelId, messageTs, userId);
 }
 
+function updateExtensionAdminMessageCanceled_(request) {
+  updateIzaMenu(
+    request.adminChannelId,
+    request.adminMessageTs,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "⚪ *Extension Request Canceled*\n\n" +
+            `*Contractor:* ${request.contractorName}\n` +
+            `*Project:* ${request.projectName}\n` +
+            `*Role:* ${request.role}\n` +
+            `*Requested extra hours:* ${request.requestedHours}\n\n` +
+            "The contractor canceled this request before review."
+        }
+      }
+    ],
+    "Extension Request Canceled"
+  );
+}
+
+
+/************************************
+ * NOTION READERS
+ ************************************/
+
 function getExtensionRequestFullDetails_(requestId) {
   const page =
     notionFetch_(
@@ -1887,6 +1588,171 @@ function getExtensionRequestFullDetails_(requestId) {
   };
 }
 
+function getExtensionContractorDetails_(contractorId) {
+  if (!contractorId) {
+    return {};
+  }
+
+  const page =
+    notionFetch_(
+      `https://api.notion.com/v1/pages/${contractorId}`,
+      "get"
+    );
+
+  const p = page.properties;
+
+  return {
+    id: page.id,
+    name:
+      getText_(p["Name"]) || "",
+    slackId:
+      getText_(p["Slack UID"]) || "",
+    email:
+      getText_(p["Email"]) || ""
+  };
+}
+
+function getExtensionRequestDetails_(requestId) {
+  const page =
+    notionFetch_(
+      `https://api.notion.com/v1/pages/${requestId}`,
+      "get"
+    );
+
+  const p = page.properties;
+
+  return {
+    id: page.id,
+    requestedHours:
+      getNumber_(p["Requested Extra Hours"]),
+    reason:
+      getText_(p["Reason"])
+  };
+}
+
+function getExtensionAssignmentDetails_(assignmentId) {
+  const page =
+    notionFetch_(
+      `https://api.notion.com/v1/pages/${assignmentId}`,
+      "get"
+    );
+
+  const p = page.properties;
+
+  return {
+    id: page.id,
+    contractedHours:
+      getNumber_(p["Hours to Contractor"]),
+    rate:
+      getNumber_(p["Rate per Hour"]),
+    projectId:
+      p["Projects 1 related to"]?.relation?.[0]?.id || ""
+  };
+}
+
+function getExtensionProjectDetails_(projectId) {
+  if (!projectId) {
+    return {
+      startDate: ""
+    };
+  }
+
+  const page =
+    notionFetch_(
+      `https://api.notion.com/v1/pages/${projectId}`,
+      "get"
+    );
+
+  const p = page.properties;
+
+  return {
+    id: page.id,
+    startDate:
+      p["Project Start Date"]?.date?.start || ""
+  };
+}
+
+
+/************************************
+ * NOTION UPDATES
+ ************************************/
+
+function updateContractorAssignmentHours_(assignmentId, newTotalHours) {
+  return notionFetch_(
+    `https://api.notion.com/v1/pages/${assignmentId}`,
+    "patch",
+    {
+      properties: {
+        "Hours to Contractor": {
+          number: newTotalHours
+        }
+      }
+    }
+  );
+}
+
+function updateExtensionRequestAfterApproval_(requestId, adminUserId, draftFile) {
+  saveExtensionAmendmentDraft_(requestId, draftFile);
+
+  return notionFetch_(
+    `https://api.notion.com/v1/pages/${requestId}`,
+    "patch",
+    {
+      properties: {
+        "Status": {
+          select: {
+            name: "Approved"
+          }
+        },
+        "Reviewed Date": {
+          date: {
+            start: new Date().toISOString().slice(0, 10)
+          }
+        },
+        "Reviewed By": {
+          rich_text: [
+            {
+              text: {
+                content: `<@${adminUserId}>`
+              }
+            }
+          ]
+        }
+      }
+    }
+  );
+}
+
+function updateExtensionRequestAfterDenial_(requestId, adminUserId) {
+  return notionFetch_(
+    `https://api.notion.com/v1/pages/${requestId}`,
+    "patch",
+    {
+      properties: {
+        "Status": {
+          select: {
+            name: "Denied"
+          }
+        },
+        "Reviewed Date": {
+          date: {
+            start: new Date().toISOString().slice(0, 10)
+          }
+        },
+        "Reviewed By": {
+          rich_text: [
+            {
+              text: {
+                content: `<@${adminUserId}>`
+              }
+            }
+          ]
+        }
+      }
+    }
+  );
+}
+
 function updateExtensionRequestAfterCancel_(requestId) {
   return notionFetch_(
     `https://api.notion.com/v1/pages/${requestId}`,
@@ -1908,27 +1774,229 @@ function updateExtensionRequestAfterCancel_(requestId) {
   );
 }
 
-function updateExtensionAdminMessageCanceled_(request) {
-  updateIzaMenu(
-    request.adminChannelId,
-    request.adminMessageTs,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "⚪ *Extension Request Canceled*\n\n" +
-            `*Contractor:* ${request.contractorName}\n` +
-            `*Project:* ${request.projectName}\n` +
-            `*Role:* ${request.role}\n` +
-            `*Requested extra hours:* ${request.requestedHours}\n\n` +
-            "The contractor canceled this request before review."
+function updateExtensionRequestAmendmentFile_(requestId, pdfFile) {
+  return notionFetch_(
+    `https://api.notion.com/v1/pages/${requestId}`,
+    "patch",
+    {
+      properties: {
+        "Amendment File": {
+          files: [
+            {
+              name: pdfFile.name,
+              type: "external",
+              external: {
+                url: pdfFile.url
+              }
+            }
+          ]
         }
       }
-    ],
-    "Extension Request Canceled"
+    }
   );
+}
+
+function addNotionCommentToPage_(pageId, text) {
+  try {
+    return notionFetch_(
+      "https://api.notion.com/v1/comments",
+      "post",
+      {
+        parent: {
+          page_id: pageId
+        },
+        rich_text: [
+          {
+            type: "text",
+            text: {
+              content: text
+            }
+          }
+        ]
+      }
+    );
+  } catch (err) {
+    Logger.log(
+      "Could not add Notion comment: " + err.message
+    );
+
+    return null;
+  }
+}
+
+
+/************************************
+ * AMENDMENT DRAFT SESSION
+ ************************************/
+
+function saveExtensionAmendmentDraft_(requestId, draftFile) {
+  PropertiesService
+    .getScriptProperties()
+    .setProperty(
+      `EXTENSION_AMENDMENT_DRAFT_${requestId}`,
+      JSON.stringify(draftFile)
+    );
+}
+
+function getExtensionAmendmentDraft_(requestId) {
+  const raw =
+    PropertiesService
+      .getScriptProperties()
+      .getProperty(`EXTENSION_AMENDMENT_DRAFT_${requestId}`);
+
+  return raw ? JSON.parse(raw) : null;
+}
+
+function clearExtensionAmendmentDraft_(requestId) {
+  PropertiesService
+    .getScriptProperties()
+    .deleteProperty(`EXTENSION_AMENDMENT_DRAFT_${requestId}`);
+}
+
+
+/************************************
+ * CONTRACTOR NOTIFICATIONS
+ ************************************/
+
+function notifyExtensionApproved_(
+    contractorSlackId,
+    projectName,
+    role,
+    additionalHours,
+    newTotalHours
+  ) {
+  if (!contractorSlackId) return;
+
+  const dmChannelId =
+    openSlackDm(contractorSlackId);
+
+  sendSlackMessage(
+    dmChannelId,
+    [
+      `Hi <@${contractorSlackId}> 👋`,
+      "",
+      `Good news — your extension request for *${role}* on *${projectName}* was approved.`,
+      "",
+      `*Additional approved hours:* ${additionalHours}`,
+      `*New total hours:* ${newTotalHours}`,
+      "",
+      "The amendment draft is being prepared and will be finalized by the team."
+    ].join("\n")
+  );
+}
+
+function notifyExtensionDenied_(contractorSlackId, projectName, role) {
+  if (!contractorSlackId) return;
+
+  const dmChannelId =
+    openSlackDm(contractorSlackId);
+
+  sendSlackMessage(
+    dmChannelId,
+    [
+      `Hi <@${contractorSlackId}> 👋`,
+      "",
+      `Your extension request for *${role}* on *${projectName}* was not approved at this time.`,
+      "",
+      "We'll contact you personally to review the situation."
+    ].join("\n")
+  );
+}
+
+
+/************************************
+ * SESSION
+ ************************************/
+
+function saveExtensionSession_(userId, session) {
+  PropertiesService
+    .getScriptProperties()
+    .setProperty(
+      `EXTENSION_SESSION_${userId}`,
+      JSON.stringify(session)
+    );
+}
+
+function getExtensionSession_(userId) {
+  const raw =
+    PropertiesService
+      .getScriptProperties()
+      .getProperty(`EXTENSION_SESSION_${userId}`);
+
+  return raw ? JSON.parse(raw) : null;
+}
+
+function clearExtensionSession_(userId) {
+  PropertiesService
+    .getScriptProperties()
+    .deleteProperty(`EXTENSION_SESSION_${userId}`);
+}
+
+
+/************************************
+ * HELPERS
+ ************************************/
+
+function replaceExtensionPlaceholder_(element, placeholder, value) {
+  element.replaceText(
+    extensionEscapeRegex_(placeholder),
+    value || ""
+  );
+}
+
+function extensionEscapeRegex_(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extensionFormatDate_(value) {
+  if (!value) return "";
+
+  let date;
+
+  if (Object.prototype.toString.call(value) === "[object Date]") {
+    date = value;
+  } else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parts = value.split("-");
+    date = new Date(
+      Number(parts[0]),
+      Number(parts[1]) - 1,
+      Number(parts[2])
+    );
+  } else {
+    date = new Date(value);
+  }
+
+  if (isNaN(date.getTime())) {
+    return "";
+  }
+
+  return Utilities.formatDate(
+    date,
+    "America/Los_Angeles",
+    "MMMM d, yyyy"
+  );
+}
+
+function extensionFormatMoney_(value) {
+  return "$" + Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function extensionSafeFileName_(name) {
+  return String(name || "Amendment")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function trashDriveFileById_(fileId) {
+  if (!fileId) return;
+
+  DriveApp
+    .getFileById(fileId)
+    .setTrashed(true);
 }
 
 function getRelationDisplayName_(property) {

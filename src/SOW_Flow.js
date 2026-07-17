@@ -4,12 +4,19 @@
  * File: SOW_Flow.gs
  *
  * Purpose:
- * SOW generation, final PDF creation, and Dropbox Sign sending.
+ * Creates SOW Google Doc drafts, finalizes SOW PDFs,
+ * and links pending-signature files back to Notion.
+ *
+ * Admin usage:
+ * Usually launched after contractor assignment or after
+ * a role claim announcement is closed.
  *
  ******************************************************/
 
+
 /************************************
- * OLD MANUAL ADMIN FLOW
+ * LEGACY MANUAL ADMIN FLOW
+ * Kept for compatibility with old buttons/routes.
  ************************************/
 
 function handleSowAdminStart_(channelId, messageTs, userId) {
@@ -17,7 +24,7 @@ function handleSowAdminStart_(channelId, messageTs, userId) {
     channelId,
     messageTs,
     buildSowLoadingBlocks_(
-      "📄 *Generate SOW*\n\nLoading contractor assignments..."
+      "🖨️ *Generate SOW*\n\nLoading contractor assignments..."
     ),
     "Loading SOW Assignments"
   );
@@ -29,8 +36,8 @@ function handleSowAdminStart_(channelId, messageTs, userId) {
       channelId,
       messageTs,
       buildSowMessageBlocks_(
-        "📄 *Generate SOW*\n\nI could not find contractor assignments available for SOW generation.",
-        "projects_admin_menu"
+        "🖨️ *Generate SOW*\n\nI could not find contractor assignments available for SOW generation.",
+        "admin_projects_menu"
       ),
       "Generate SOW"
     );
@@ -82,8 +89,8 @@ function handleSowCreateConfirm_(channelId, messageTs, userId) {
       channelId,
       messageTs,
       buildSowMessageBlocks_(
-        "📄 *Generate SOW*\n\nI could not find the selected assignment. Please start again.",
-        "projects_admin_menu"
+        "🖨️ *Generate SOW*\n\nI could not find the selected assignment. Please start again.",
+        "admin_projects_menu"
       ),
       "Generate SOW"
     );
@@ -99,8 +106,8 @@ function handleSowCreateConfirm_(channelId, messageTs, userId) {
       channelId,
       messageTs,
       buildSowMessageBlocks_(
-        "📄 *Generate SOW*\n\nThis assignment is no longer available.",
-        "projects_admin_menu"
+        "🖨️ *Generate SOW*\n\nThis assignment is no longer available.",
+        "admin_projects_menu"
       ),
       "Generate SOW"
     );
@@ -111,7 +118,7 @@ function handleSowCreateConfirm_(channelId, messageTs, userId) {
     channelId,
     messageTs,
     buildSowLoadingBlocks_(
-      "📄 *Generate SOW*\n\nCreating the SOW draft..."
+      "🖨️ *Generate SOW*\n\nCreating the SOW draft..."
     ),
     "Creating SOW"
   );
@@ -138,15 +145,16 @@ function handleSowCancel_(channelId, messageTs, userId) {
     channelId,
     messageTs,
     buildSowMessageBlocks_(
-      "📄 *Generate SOW*\n\nSOW generation canceled.",
-      "projects_admin_menu"
+      "🖨️ *Generate SOW*\n\nSOW generation canceled.",
+      "admin_projects_menu"
     ),
     "SOW Canceled"
   );
 }
 
+
 /************************************
- * PROJECT BUTTON FLOW
+ * PROJECT SOW FLOW
  ************************************/
 
 function handleSowGenerateForProject_(payload, channelId, messageTs, userId) {
@@ -158,7 +166,7 @@ function handleSowGenerateForProject_(payload, channelId, messageTs, userId) {
       messageTs,
       buildSowMessageBlocks_(
         "🖨️ *Generate SOWs*\n\nI could not find the project ID.",
-        "projects_admin_menu"
+        "admin_projects_menu"
       ),
       "Generate SOWs"
     );
@@ -193,7 +201,7 @@ function handleSowFinalizeForProject_(payload, channelId, messageTs, userId) {
       messageTs,
       buildSowMessageBlocks_(
         "✅ *Finalize SOWs*\n\nI could not find the project ID.",
-        "projects_admin_menu"
+        "admin_projects_menu"
       ),
       "Finalize SOWs"
     );
@@ -220,7 +228,6 @@ function handleSowFinalizeForProject_(payload, channelId, messageTs, userId) {
 }
 
 
-
 /************************************
  * BLOCKS
  ************************************/
@@ -237,7 +244,7 @@ function buildSowAssignmentSelectBlocks_(session) {
         text: {
           type: "mrkdwn",
           text:
-            "📄 *Review SOW Data*\n\n" +
+            "🖨️ *Review SOW Data*\n\n" +
             `*Contractor:* ${selected.contractorName}\n` +
             `*Project:* ${selected.projectName}\n` +
             `*Roles:* ${selected.roleSummary}\n` +
@@ -254,9 +261,9 @@ function buildSowAssignmentSelectBlocks_(session) {
       {
         type: "actions",
         elements: [
-          button_("✅ Create SOW Draft", "sow_create_confirm"),
+          primaryButton_("✅ Create SOW Draft", "sow_create_confirm"),
           button_("⬅️ Back", "sow_admin_start"),
-          button_("❌ Cancel", "sow_cancel")
+          dangerButton_("❌ Cancel", "sow_cancel")
         ]
       }
     ];
@@ -268,7 +275,7 @@ function buildSowAssignmentSelectBlocks_(session) {
       text: {
         type: "mrkdwn",
         text:
-          "📄 *Generate SOW*\n\n" +
+          "🖨️ *Generate SOW*\n\n" +
           "Select the contractor assignment for this SOW."
       }
     },
@@ -297,7 +304,7 @@ function buildSowAssignmentSelectBlocks_(session) {
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "projects_admin_menu")
+        button_("⬅️ Back", "admin_projects_menu")
       ]
     }
   ];
@@ -310,7 +317,7 @@ function buildSowCreatedBlocks_(assignment, file) {
       text: {
         type: "mrkdwn",
         text:
-          "✅ *SOW Draft Created*\n\n" +
+          "🖨️ *SOW Draft Created*\n\n" +
           `*Contractor:* ${assignment.contractorName}\n` +
           `*Project:* ${assignment.projectName}\n` +
           `*Roles:* ${assignment.roleSummary || "-"}\n\n` +
@@ -320,39 +327,8 @@ function buildSowCreatedBlocks_(assignment, file) {
     {
       type: "actions",
       elements: [
-        button_("📄 Generate Another", "sow_admin_start"),
-        button_("⬅️ Back", "projects_admin_menu")
+        button_("📁 Projects", "admin_projects_menu")
       ]
-    }
-  ];
-}
-
-function buildSowMessageBlocks_(text, backActionId) {
-  return [
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text
-      }
-    },
-    {
-      type: "actions",
-      elements: [
-        button_("⬅️ Back", backActionId || "projects_admin_menu")
-      ]
-    }
-  ];
-}
-
-function buildSowLoadingBlocks_(text) {
-  return [
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text
-      }
     }
   ];
 }
@@ -413,6 +389,8 @@ function buildSowProjectResultsBlocks_(projectId, results) {
       action_id: "sow_finalize_for_project",
       value: projectId
     });
+  } else {
+    actions.push(button_("📁 Projects", "admin_projects_menu"));
   }
 
   return [
@@ -473,14 +451,45 @@ function buildSowFinalizeResultsBlocks_(projectId, results) {
     {
       type: "actions",
       elements: [
-        button_("👋 Bye IZA", "menu_close")
+        button_("📁 Projects", "admin_projects_menu")
       ]
     }
   ];
 }
 
+function buildSowMessageBlocks_(text, backActionId) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", backActionId || "admin_projects_menu")
+      ]
+    }
+  ];
+}
+
+function buildSowLoadingBlocks_(text) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text
+      }
+    }
+  ];
+}
+
+
 /************************************
- * DATA
+ * LOAD SOW ASSIGNMENTS
  ************************************/
 
 function loadSowAssignments_() {
@@ -623,8 +632,9 @@ function findSowDeliverables_(projectId, roleName) {
   return getText_(match.properties["Deliverables"]);
 }
 
+
 /************************************
- * GENERATION
+ * CREATE DRAFTS
  ************************************/
 
 function generateSowsForProject_(projectId) {
@@ -799,6 +809,11 @@ function buildSowGroupForProjectContractor_(projectId, contractorName) {
   return buildSowGroupSummary_(group);
 }
 
+
+/************************************
+ * FINALIZE PDFS
+ ************************************/
+
 function finalizeSowsForProject_(projectId) {
   const assignmentRows =
     queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
@@ -857,7 +872,7 @@ function finalizeSowsForProject_(projectId) {
       );
 
       const pdfFileName = sowSafeFileName_(
-        `${year} - ${group.projectName} - ${group.contractorName} - Attachment A — Statement of Work (SOW).pdf`
+        `${year} - ${group.projectName} - ${group.contractorName} - Attachment A - Statement of Work (SOW).pdf`
       );
 
       const notionFileName = sowSafeFileName_(
@@ -907,6 +922,60 @@ function finalizeSowsForProject_(projectId) {
   };
 }
 
+
+/************************************
+ * NOTION FILE UPDATE
+ ************************************/
+
+function updateSowContractorFileForAssignments_(assignmentIds, fileOrName, fileUrl, notionFileName) {
+  if (!assignmentIds || !assignmentIds.length || !fileOrName) return;
+
+  let fileName = "";
+  let finalFileUrl = "";
+
+  if (typeof fileOrName === "string") {
+    fileName = fileOrName;
+    finalFileUrl = fileUrl || "";
+  } else {
+    fileName =
+      typeof fileOrName.getName === "function"
+        ? fileOrName.getName()
+        : fileOrName.name || "SOW";
+
+    finalFileUrl =
+      typeof fileOrName.getUrl === "function"
+        ? fileOrName.getUrl()
+        : fileOrName.url || "";
+  }
+
+  if (!finalFileUrl) {
+    throw new Error("Missing SOW file URL.");
+  }
+
+  assignmentIds.forEach(assignmentId => {
+    notionFetch_(
+      `https://api.notion.com/v1/pages/${assignmentId}`,
+      "patch",
+      {
+        properties: {
+          "SOW Contractor": {
+            files: [
+              {
+                name: notionFileName || fileName,
+                type: "external",
+                external: {
+                  url: finalFileUrl
+                }
+              }
+            ]
+          }
+        }
+      }
+    );
+  });
+}
+
+
 /************************************
  * SESSION
  ************************************/
@@ -930,6 +999,7 @@ function clearSowSession_(userId) {
   PropertiesService.getScriptProperties()
     .deleteProperty(`SOW_SESSION_${userId}`);
 }
+
 
 /************************************
  * HELPERS
@@ -1088,52 +1158,4 @@ function extractGoogleDriveFileId_(url) {
   }
 
   return "";
-}
-
-function updateSowContractorFileForAssignments_(assignmentIds, fileOrName, fileUrl, notionFileName) {
-  if (!assignmentIds || !assignmentIds.length || !fileOrName) return;
-
-  let fileName = "";
-  let finalFileUrl = "";
-
-  if (typeof fileOrName === "string") {
-    fileName = fileOrName;
-    finalFileUrl = fileUrl || "";
-  } else {
-    fileName =
-      typeof fileOrName.getName === "function"
-        ? fileOrName.getName()
-        : fileOrName.name || "SOW";
-
-    finalFileUrl =
-      typeof fileOrName.getUrl === "function"
-        ? fileOrName.getUrl()
-        : fileOrName.url || "";
-  }
-
-  if (!finalFileUrl) {
-    throw new Error("Missing SOW file URL.");
-  }
-
-  assignmentIds.forEach(assignmentId => {
-    notionFetch_(
-      `https://api.notion.com/v1/pages/${assignmentId}`,
-      "patch",
-      {
-        properties: {
-          "SOW Contractor": {
-            files: [
-              {
-                name: notionFileName || fileName,
-                type: "external",
-                external: {
-                  url: finalFileUrl
-                }
-              }
-            ]
-          }
-        }
-      }
-    );
-  });
 }

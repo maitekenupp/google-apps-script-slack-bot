@@ -7,9 +7,10 @@
  * Entry point for all Slack requests.
  *
  * Responsibilities:
- * • Receive Slack Events API requests
- * • Receive Slack Block Kit interactions
- * • Route requests to the proper handler
+ * - Receive Slack Events API requests
+ * - Receive Slack Block Kit interactions
+ * - Receive Slack modal submissions
+ * - Route each request to the correct handler
  *
  ******************************************************/
 
@@ -57,68 +58,28 @@ function doPost(e) {
   }
 }
 
-function postSlackMessage_(channelId, blocks, text) {
-  const token =
-    PropertiesService.getScriptProperties()
-      .getProperty("SLACK_BOT_TOKEN");
-
-  if (!channelId) {
-    throw new Error("Missing channelId. Check CONTRACTOR_OPPORTUNITIES_CHANNEL script property.");
-  }
-
-  const payload = {
-    channel: channelId,
-    text: text || "IZA message",
-    blocks: blocks || []
-  };
-
-  const response = UrlFetchApp.fetch(
-    "https://slack.com/api/chat.postMessage",
-    {
-      method: "post",
-      contentType: "application/json",
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    }
-  );
-
-  const raw = response.getContentText();
-  Logger.log(raw);
-
-  const result = JSON.parse(raw);
-
-  if (!result.ok) {
-    throw new Error(`Slack postMessage error: ${result.error} | ${raw}`);
-  }
-
-  return result;
-}
-
 
 /************************************
  * SLACK INTERACTION ROUTER
  ************************************/
 
 function handleSlackInteractionPayload_(payload) {
-  if (payload.type === 'block_actions') {
+  if (payload.type === "block_actions") {
     handleIzaButtonClick_(payload);
-    return ContentService.createTextOutput('');
+    return ContentService.createTextOutput("");
   }
 
-  if (payload.type === 'view_submission') {
-  const response = handleSlackViewSubmission_(payload);
+  if (payload.type === "view_submission") {
+    const response = handleSlackViewSubmission_(payload);
 
-  return ContentService
-    .createTextOutput(
-      JSON.stringify(response || { response_action: "clear" })
-    )
-    .setMimeType(ContentService.MimeType.JSON);
-}
+    return ContentService
+      .createTextOutput(
+        JSON.stringify(response || { response_action: "clear" })
+      )
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 
-  return ContentService.createTextOutput('');
+  return ContentService.createTextOutput("");
 }
 
 
@@ -131,22 +92,18 @@ function handleSlackEvent_(data) {
 
   const event = data.event;
 
-  if (event.type === 'file_shared') {
-    if (handlePendingInvoiceUploadFromSlackFile_(event.file_id)) {
-      return;
-    }
-
+  if (event.type === "file_shared") {
     saveSlackFileToDrive(event.file_id);
     return;
   }
 
-  if (event.type === 'app_mention') {
+  if (event.type === "app_mention") {
     handleIzaCommand(event);
     return;
   }
 
   if (
-    event.type === 'message' &&
+    event.type === "message" &&
     !event.bot_id &&
     !event.subtype
   ) {
@@ -172,6 +129,54 @@ function isDuplicateSlackEvent_(data) {
 
   props.setProperty(eventKey, new Date().toISOString());
   return false;
+}
+
+
+/************************************
+ * DIRECT SLACK POST HELPER
+ * Used by flows that send Block Kit messages directly.
+ ************************************/
+
+function postSlackMessage_(channelId, blocks, text) {
+  const token =
+    PropertiesService.getScriptProperties()
+      .getProperty("SLACK_BOT_TOKEN");
+
+  if (!token) {
+    throw new Error("Missing SLACK_BOT_TOKEN script property.");
+  }
+
+  if (!channelId) {
+    throw new Error("Missing channelId for Slack message.");
+  }
+
+  const payload = {
+    channel: channelId,
+    text: text || "IZA message",
+    blocks: blocks || []
+  };
+
+  const response = UrlFetchApp.fetch(
+    "https://slack.com/api/chat.postMessage",
+    {
+      method: "post",
+      contentType: "application/json",
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    }
+  );
+
+  const raw = response.getContentText();
+  const result = JSON.parse(raw);
+
+  if (!result.ok) {
+    throw new Error(`Slack postMessage error: ${result.error} | ${raw}`);
+  }
+
+  return result;
 }
 
 

@@ -1,3 +1,19 @@
+/******************************************************
+ *
+ * IZA
+ * File: Claims_Admin_Flow.gs
+ *
+ * Purpose:
+ * Admin workflow for reviewing contractor role claims,
+ * assigning claimed roles, closing announcements, and
+ * notifying claimants.
+ *
+ ******************************************************/
+
+/************************************
+ * CLAIMS ADMIN MENU
+ ************************************/
+
 function showClaimsAdminMenu_(channelId, messageTs) {
   const announcements = loadRoleClaimAnnouncements_();
 
@@ -16,21 +32,26 @@ function loadRoleClaimAnnouncements_() {
   return Object.keys(all)
     .filter(key => key.startsWith("ROLE_CLAIM_"))
     .map(key => {
-      const data = JSON.parse(all[key]);
+      try {
+        const data = JSON.parse(all[key]);
 
-      return {
-        key,
-        project: data.project,
-        roles: data.roles || [],
-        claims: data.claims || [],
-        claimNotifications: data.claimNotifications || [],
-        closed: data.closed || false,
-        closedAt: data.closedAt || ""
-      };
+        return {
+          key,
+          project: data.project || {},
+          roles: data.roles || [],
+          claims: data.claims || [],
+          claimNotifications: data.claimNotifications || [],
+          closed: data.closed || false,
+          closedAt: data.closedAt || ""
+        };
+      } catch (err) {
+        Logger.log(`Could not read claim announcement ${key}: ${err.message}`);
+        return null;
+      }
     })
-    .filter(item => !item.closed)
+    .filter(item => item && !item.closed)
     .sort((a, b) =>
-      (a.project?.name || "").localeCompare(b.project?.name || "")
+      String(a.project?.name || "").localeCompare(String(b.project?.name || ""))
     );
 }
 
@@ -47,7 +68,7 @@ function buildClaimsProjectListBlocks_(announcements) {
       {
         type: "actions",
         elements: [
-          button_("⬅️ Back", "projects_admin_menu")
+          button_("⬅️ Back", "admin_contractors_menu")
         ]
       }
     ];
@@ -59,7 +80,7 @@ function buildClaimsProjectListBlocks_(announcements) {
       text: {
         type: "mrkdwn",
         text:
-          "📌 *Role Claims Admin*\n\n" +
+          "📌 *Role Claims*\n\n" +
           "Select a project to review open role claims."
       }
     }
@@ -77,7 +98,7 @@ function buildClaimsProjectListBlocks_(announcements) {
         type: "mrkdwn",
         text:
           `*${item.project?.name || "Untitled Project"}*\n` +
-          `Open: ${openCount} | Assigned: ${assignedCount} | Claims: ${claimCount}`
+          `Open: ${openCount} | Assigned: ${assignedCount} | Roles: ${roleCount} | Claims: ${claimCount}`
       },
       accessory: {
         type: "button",
@@ -95,13 +116,17 @@ function buildClaimsProjectListBlocks_(announcements) {
   blocks.push({
     type: "actions",
     elements: [
-      button_("⬅️ Back", "projects_admin_menu"),
-      button_("🏠 Main Menu", "menu_main")
+      button_("⬅️ Back", "admin_contractors_menu")
     ]
   });
 
   return blocks;
 }
+
+
+/************************************
+ * PROJECT CLAIM VIEW
+ ************************************/
 
 function buildClaimsRoleListBlocks_(announcementKey) {
   const item = getRoleClaimAnnouncement_(announcementKey);
@@ -113,7 +138,7 @@ function buildClaimsRoleListBlocks_(announcementKey) {
         text: {
           type: "mrkdwn",
           text:
-            "📌 *Role Claims Admin*\n\n" +
+            "📌 *Role Claims*\n\n" +
             "This announcement is closed or no longer available."
         }
       },
@@ -132,7 +157,7 @@ function buildClaimsRoleListBlocks_(announcementKey) {
       text: {
         type: "mrkdwn",
         text:
-          "📌 *Role Claims Admin*\n\n" +
+          "📌 *Role Claims*\n\n" +
           `*Project:* ${item.project?.name || "-"}\n\n` +
           "Review announced roles."
       }
@@ -140,10 +165,12 @@ function buildClaimsRoleListBlocks_(announcementKey) {
   ];
 
   sortAnnouncementRolesByRoleSort_(item.roles).forEach(role => {
-    const roleIndex = item.roles.findIndex(r => r.role === role.role);
+    const roleIndex = item.roles.findIndex(itemRole =>
+      itemRole.role === role.role
+    );
 
-    const claimsForRole = item.claims.filter(
-      claim => claim.role === role.role
+    const claimsForRole = item.claims.filter(claim =>
+      claim.role === role.role
     );
 
     const assignedText = role.assignedTo
@@ -185,22 +212,26 @@ function buildClaimsRoleListBlocks_(announcementKey) {
     type: "actions",
     elements: [
       button_("⬅️ Back", "claims_admin_menu"),
-      {
-        type: "button",
-        text: {
-          type: "plain_text",
-          text: "Close Announcement",
-          emoji: true
-        },
-        style: "danger",
-        action_id: "claims_close_announcement",
-        value: announcementKey
-      }
+      dangerButton_("Close Announcement", "claims_close_announcement", announcementKey)
     ]
   });
 
   return blocks;
 }
+
+function handleClaimsViewProject_(channelId, messageTs, announcementKey) {
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildClaimsRoleListBlocks_(announcementKey),
+    "Role Claims"
+  );
+}
+
+
+/************************************
+ * ROLE CLAIMANTS VIEW
+ ************************************/
 
 function buildClaimsClaimantBlocks_(announcementKey, roleIndex) {
   const item = getRoleClaimAnnouncement_(announcementKey);
@@ -274,8 +305,8 @@ function buildClaimsClaimantBlocks_(announcementKey, roleIndex) {
     ];
   }
 
-  const claims = item.claims.filter(
-    claim => claim.role === role.role
+  const claims = item.claims.filter(claim =>
+    claim.role === role.role
   );
 
   const blocks = [
@@ -353,6 +384,25 @@ function buildClaimsClaimantBlocks_(announcementKey, roleIndex) {
   return blocks;
 }
 
+function handleClaimsViewRole_(channelId, messageTs, value) {
+  const data = JSON.parse(value);
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildClaimsClaimantBlocks_(
+      data.announcementKey,
+      Number(data.roleIndex)
+    ),
+    "Role Claimants"
+  );
+}
+
+
+/************************************
+ * SINGLE CLAIM VIEW
+ ************************************/
+
 function buildSingleClaimBlocks_(announcementKey, userId) {
   const item = getRoleClaimAnnouncement_(announcementKey);
 
@@ -371,8 +421,8 @@ function buildSingleClaimBlocks_(announcementKey, userId) {
   const contractor = findContractorBySlackId_(userId);
   const claimantName = contractor?.name || `<@${userId}>`;
 
-  const claims = (item.claims || []).filter(
-    claim => claim.userId === userId
+  const claims = (item.claims || []).filter(claim =>
+    claim.userId === userId
   );
 
   const blocks = [
@@ -385,7 +435,7 @@ function buildSingleClaimBlocks_(announcementKey, userId) {
           `*Project:* ${item.project?.name || "-"}\n` +
           `*Claimant:* ${claimantName}\n` +
           `*Slack:* <@${userId}>\n\n` +
-          "Review this person’s claimed role(s)."
+          "Review this person's claimed role(s)."
       }
     }
   ];
@@ -478,29 +528,6 @@ function buildBackToSingleClaimButtonBlock_(announcementKey, userId) {
   };
 }
 
-function handleClaimsViewProject_(channelId, messageTs, announcementKey) {
-  updateIzaMenu(
-    channelId,
-    messageTs,
-    buildClaimsRoleListBlocks_(announcementKey),
-    "Role Claims"
-  );
-}
-
-function handleClaimsViewRole_(channelId, messageTs, value) {
-  const data = JSON.parse(value);
-
-  updateIzaMenu(
-    channelId,
-    messageTs,
-    buildClaimsClaimantBlocks_(
-      data.announcementKey,
-      Number(data.roleIndex)
-    ),
-    "Role Claimants"
-  );
-}
-
 function handleClaimsViewSingleClaim_(channelId, messageTs, value) {
   const data = JSON.parse(value);
 
@@ -529,6 +556,11 @@ function handleClaimsBackToSingleClaimMessage_(channelId, messageTs, value) {
   );
 }
 
+
+/************************************
+ * ASSIGN CLAIMED ROLE
+ ************************************/
+
 function handleClaimsAssignPerson_(channelId, messageTs, value) {
   const data = JSON.parse(value);
   const item = getRoleClaimAnnouncement_(data.announcementKey);
@@ -537,7 +569,7 @@ function handleClaimsAssignPerson_(channelId, messageTs, value) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildComingSoonBlocks_("Claim not found"),
+      buildComingSoonBlocks_("Claim not found", "claims_admin_menu"),
       "Claim not found"
     );
     return;
@@ -551,7 +583,7 @@ function handleClaimsAssignPerson_(channelId, messageTs, value) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildComingSoonBlocks_("Role not found"),
+      buildComingSoonBlocks_("Role not found", "claims_admin_menu"),
       "Role not found"
     );
     return;
@@ -571,42 +603,7 @@ function handleClaimsAssignPerson_(channelId, messageTs, value) {
     updateIzaMenu(
       channelId,
       messageTs,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "❌ *Could not assign contractor.*\n\n" +
-              `No Team Directory record found for Slack user <@${data.userId}>.`
-          }
-        },
-        {
-          type: "actions",
-          elements: [
-            {
-              type: "button",
-              text: {
-                type: "plain_text",
-                text: "⬅️ Back",
-                emoji: true
-              },
-              action_id: data.returnTo === "single_claim"
-                ? "claims_view_single_claim"
-                : "claims_view_role",
-              value: data.returnTo === "single_claim"
-                ? JSON.stringify({
-                    announcementKey: data.announcementKey,
-                    userId: data.userId
-                  })
-                : JSON.stringify({
-                    announcementKey: data.announcementKey,
-                    roleIndex
-                  })
-            }
-          ]
-        }
-      ],
+      buildContractorNotFoundBlocks_(data, roleIndex),
       "Contractor Not Found"
     );
     return;
@@ -622,7 +619,7 @@ function handleClaimsAssignPerson_(channelId, messageTs, value) {
           type: "mrkdwn",
           text:
             "⏳ *Assigning contractor...*\n\n" +
-            `*Project:* ${item.project.name}\n` +
+            `*Project:* ${item.project?.name || "-"}\n` +
             `*Role:* ${role.role}\n` +
             `*Contractor:* ${contractor.name}`
         }
@@ -639,28 +636,14 @@ function handleClaimsAssignPerson_(channelId, messageTs, value) {
     projectId: item.project.id
   });
 
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(data.announcementKey);
-
-  const stored = JSON.parse(raw);
-  stored.roles[roleIndex].assignedTo = {
-    userId: data.userId,
-    contractorName: contractor.name,
-    assignedAt: new Date().toISOString()
-  };
-
-  PropertiesService.getScriptProperties().setProperty(
+  const stored = markClaimRoleAssigned_(
     data.announcementKey,
-    JSON.stringify(stored)
+    roleIndex,
+    data.userId,
+    contractor.name
   );
 
-  CacheService
-    .getScriptCache()
-    .remove(`PROJECT_ROLES_${item.project.id}`);
-
-  CacheService
-    .getScriptCache()
-    .remove("PROJECTS_NEEDING_CONTRACTORS");
+  clearClaimRelatedCaches_(item.project.id);
 
   refreshClaimNotificationMessages_(data.announcementKey);
 
@@ -711,6 +694,80 @@ function handleClaimsAssignPerson_(channelId, messageTs, value) {
   );
 }
 
+function buildContractorNotFoundBlocks_(data, roleIndex) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "❌ *Could not assign contractor.*\n\n" +
+          `No Team Directory record found for Slack user <@${data.userId}>.`
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "⬅️ Back",
+            emoji: true
+          },
+          action_id: data.returnTo === "single_claim"
+            ? "claims_view_single_claim"
+            : "claims_view_role",
+          value: data.returnTo === "single_claim"
+            ? JSON.stringify({
+                announcementKey: data.announcementKey,
+                userId: data.userId
+              })
+            : JSON.stringify({
+                announcementKey: data.announcementKey,
+                roleIndex
+              })
+        }
+      ]
+    }
+  ];
+}
+
+function markClaimRoleAssigned_(announcementKey, roleIndex, userId, contractorName) {
+  const raw = PropertiesService.getScriptProperties()
+    .getProperty(announcementKey);
+
+  const stored = JSON.parse(raw);
+
+  stored.roles[roleIndex].assignedTo = {
+    userId,
+    contractorName,
+    assignedAt: new Date().toISOString()
+  };
+
+  PropertiesService.getScriptProperties().setProperty(
+    announcementKey,
+    JSON.stringify(stored)
+  );
+
+  return stored;
+}
+
+function clearClaimRelatedCaches_(projectId) {
+  CacheService
+    .getScriptCache()
+    .remove(`PROJECT_ROLES_${projectId}`);
+
+  CacheService
+    .getScriptCache()
+    .remove("PROJECTS_NEEDING_CONTRACTORS");
+}
+
+
+/************************************
+ * CLOSE ANNOUNCEMENT
+ ************************************/
+
 function handleClaimsCloseAnnouncement_(channelId, messageTs, announcementKey) {
   const raw = PropertiesService.getScriptProperties()
     .getProperty(announcementKey);
@@ -719,7 +776,7 @@ function handleClaimsCloseAnnouncement_(channelId, messageTs, announcementKey) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildComingSoonBlocks_("Announcement not found"),
+      buildComingSoonBlocks_("Announcement not found", "claims_admin_menu"),
       "Announcement not found"
     );
     return;
@@ -735,6 +792,18 @@ function handleClaimsCloseAnnouncement_(channelId, messageTs, announcementKey) {
   );
 
   refreshClaimNotificationMessages_(announcementKey);
+
+  if (hasAssignedRolesForSowPrompt_(data)) {
+    postSowReadyAfterClaimClose_({
+      key: announcementKey,
+      project: data.project,
+      roles: data.roles || [],
+      claims: data.claims || [],
+      claimNotifications: data.claimNotifications || [],
+      closed: true,
+      closedAt: data.closedAt
+    });
+  }
 
   updateIzaMenu(
     channelId,
@@ -761,6 +830,66 @@ function handleClaimsCloseAnnouncement_(channelId, messageTs, announcementKey) {
   );
 }
 
+function hasAssignedRolesForSowPrompt_(announcement) {
+  return (announcement.roles || []).some(role =>
+    role.assignedTo
+  );
+}
+
+function postSowReadyAfterClaimClose_(announcement) {
+  const projectId = announcement?.project?.id || "";
+  const projectName = announcement?.project?.name || "this project";
+
+  if (!projectId) {
+    return;
+  }
+
+  const assignedRoles = (announcement.roles || []).filter(role =>
+    role.assignedTo
+  );
+
+  if (!assignedRoles.length) {
+    return;
+  }
+
+  postSlackMessage_(
+    CONTRACTOR_CLAIMS_CHANNEL,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "🖨️ *SOWs Ready to Generate*\n\n" +
+            `The role announcement for *${projectName}* is now closed.\n\n` +
+            "Please generate SOWs for the assigned contractors."
+        }
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "🖨️ Generate SOWs",
+              emoji: true
+            },
+            action_id: "sow_generate_for_project",
+            value: projectId
+          }
+        ]
+      }
+    ],
+    "SOWs Ready to Generate"
+  );
+}
+
+
+/************************************
+ * ANNOUNCEMENT DATA
+ ************************************/
+
 function getRoleClaimAnnouncement_(announcementKey) {
   const raw = PropertiesService.getScriptProperties()
     .getProperty(announcementKey);
@@ -771,7 +900,7 @@ function getRoleClaimAnnouncement_(announcementKey) {
 
   return {
     key: announcementKey,
-    project: data.project,
+    project: data.project || {},
     roles: data.roles || [],
     claims: data.claims || [],
     claimNotifications: data.claimNotifications || [],
@@ -788,6 +917,101 @@ function findContractorBySlackId_(slackId) {
   );
 }
 
+
+/************************************
+ * CLAIM NOTIFICATION MESSAGES
+ ************************************/
+
+function buildSingleClaimNotificationReturnBlocks_(announcementKey, userId) {
+  const item = getRoleClaimAnnouncement_(announcementKey);
+
+  if (!item) {
+    return [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "This claim announcement was not found."
+        }
+      }
+    ];
+  }
+
+  const notification =
+    getClaimNotificationForUser_(announcementKey, userId);
+
+  const claimedRoles =
+    notification?.claimedRoles ||
+    (item.claims || [])
+      .filter(claim => claim.userId === userId)
+      .map(claim => claim.role);
+
+  const allClosed = claimedRoles.every(roleName => {
+    const role = item.roles.find(itemRole => itemRole.role === roleName);
+    return !role || role.assignedTo || item.closed;
+  });
+
+  return buildClaimNotificationBlocks_(
+    announcementKey,
+    userId,
+    claimedRoles,
+    allClosed
+  );
+}
+
+function getClaimNotificationForUser_(announcementKey, userId) {
+  const raw = PropertiesService.getScriptProperties()
+    .getProperty(announcementKey);
+
+  if (!raw) return null;
+
+  const data = JSON.parse(raw);
+
+  return (data.claimNotifications || []).find(item =>
+    item.userId === userId
+  ) || null;
+}
+
+function refreshClaimNotificationMessages_(announcementKey) {
+  const data = getRoleClaimAnnouncement_(announcementKey);
+
+  if (!data) return;
+
+  const notifications = data.claimNotifications || [];
+
+  notifications.forEach(notification => {
+    const claimedRoles = notification.claimedRoles || [];
+
+    const allClosed = claimedRoles.every(roleName => {
+      const role = data.roles.find(itemRole => itemRole.role === roleName);
+      return !role || role.assignedTo || data.closed;
+    });
+
+    try {
+      updateIzaMenu(
+        notification.channelId,
+        notification.messageTs,
+        buildClaimNotificationBlocks_(
+          announcementKey,
+          notification.userId,
+          claimedRoles,
+          allClosed
+        ),
+        "Role claim updated"
+      );
+    } catch (err) {
+      Logger.log(
+        `Could not update claim notification ${notification.messageTs}: ${err.message}`
+      );
+    }
+  });
+}
+
+
+/************************************
+ * CONTRACTOR NOTIFICATIONS
+ ************************************/
+
 function notifySelectedContractor_(announcement, role, selectedUserId, contractorName) {
   const project = announcement.project || {};
   const projectName = project.name || "the project";
@@ -800,14 +1024,14 @@ function notifySelectedContractor_(announcement, role, selectedUserId, contracto
       [
         `Hi <@${selectedUserId}> 👋`,
         "",
-        `Good news — you’ve been assigned to *${role.role}* for *${projectName}*.`,
+        `Good news — you've been assigned to *${role.role}* for *${projectName}*.`,
         "",
         `*Hours:* ${role.hours}`,
         `*Deliverables:* ${role.deliverables || "-"}`,
-        `*Start date:* ${project.startDate || "-"}`,
-        `*End date:* ${project.endDate || "-"}`,
+        `*Start date:* ${formatProjectDateForClaimDm_(project.startDate)}`,
+        `*End date:* ${formatProjectDateForClaimDm_(project.endDate)}`,
         "",
-        "You’ll receive the SOW file shortly.",
+        "You'll receive the SOW file shortly.",
         "",
         "Thanks for claiming this opportunity."
       ].join("\n")
@@ -840,7 +1064,7 @@ function notifyUnselectedClaimants_(announcement, roleName, selectedUserId, sele
           "",
           `Thanks for claiming *${roleName}* on *${projectName}*.`,
           "",
-          "This role has now been assigned to another contractor.",
+          `This role has now been assigned to ${selectedContractorName}.`,
           "",
           "Please keep an eye on the announcements channel for new opportunities."
         ].join("\n")
@@ -851,93 +1075,10 @@ function notifyUnselectedClaimants_(announcement, roleName, selectedUserId, sele
   });
 }
 
-function buildSingleClaimNotificationReturnBlocks_(announcementKey, userId) {
-  const item = getRoleClaimAnnouncement_(announcementKey);
 
-  if (!item) {
-    return [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: "This claim announcement was not found."
-        }
-      }
-    ];
-  }
-
-  const notification =
-    getClaimNotificationForUser_(announcementKey, userId);
-
-  const claimedRoles =
-    notification?.claimedRoles ||
-    (item.claims || [])
-      .filter(claim => claim.userId === userId)
-      .map(claim => claim.role);
-
-  const allClosed = claimedRoles.every(roleName => {
-    const role = item.roles.find(role => role.role === roleName);
-    return !role || role.assignedTo;
-  });
-
-  return buildClaimNotificationBlocks_(
-    announcementKey,
-    userId,
-    claimedRoles,
-    allClosed
-  );
-}
-
-function getClaimNotificationForUser_(announcementKey, userId) {
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(announcementKey);
-
-  if (!raw) return null;
-
-  const data = JSON.parse(raw);
-
-  return (data.claimNotifications || []).find(item =>
-    item.userId === userId
-  ) || null;
-}
-
-function refreshClaimNotificationMessages_(announcementKey) {
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(announcementKey);
-
-  if (!raw) return;
-
-  const data = JSON.parse(raw);
-  const notifications = data.claimNotifications || [];
-
-  notifications.forEach(notification => {
-    const item = getRoleClaimAnnouncement_(announcementKey);
-    const claimedRoles = notification.claimedRoles || [];
-
-    const allClosed = claimedRoles.every(roleName => {
-      const role = item.roles.find(role => role.role === roleName);
-      return !role || role.assignedTo;
-    });
-
-    try {
-      updateIzaMenu(
-        notification.channelId,
-        notification.messageTs,
-        buildClaimNotificationBlocks_(
-          announcementKey,
-          notification.userId,
-          claimedRoles,
-          allClosed
-        ),
-        "Role claim updated"
-      );
-    } catch (err) {
-      Logger.log(
-        `Could not update claim notification ${notification.messageTs}: ${err.message}`
-      );
-    }
-  });
-}
+/************************************
+ * STATUS TEXT
+ ************************************/
 
 function getSingleClaimRoleStatusText_(role, userId) {
   if (!role.assignedTo) {
@@ -951,44 +1092,13 @@ function getSingleClaimRoleStatusText_(role, userId) {
   return `🔴 Assigned to: ${role.assignedTo.contractorName || `<@${role.assignedTo.userId}>`}`;
 }
 
-function formatClaimDate_(isoString) {
-  if (!isoString) return "-";
 
-  const date = new Date(isoString);
-
-  if (isNaN(date.getTime())) return "-";
-
-  const timezone = "America/Los_Angeles";
-
-  const month = Utilities.formatDate(date, timezone, "MMMM");
-  const day = Number(Utilities.formatDate(date, timezone, "d"));
-  const hour = Utilities.formatDate(date, timezone, "ha")
-    .replace("AM", "AM")
-    .replace("PM", "PM");
-
-  return `${month} ${day}${getDaySuffix_(day)}, ${hour}`;
-}
-
-function getDaySuffix_(day) {
-  if (day >= 11 && day <= 13) return "th";
-
-  const lastDigit = day % 10;
-
-  if (lastDigit === 1) return "st";
-  if (lastDigit === 2) return "nd";
-  if (lastDigit === 3) return "rd";
-
-  return "th";
-}
+/************************************
+ * SORTING + DATE HELPERS
+ ************************************/
 
 function sortClaimsByRoleSort_(claims) {
-  const roleOptions = loadNotionRoleOptions_();
-
-  const sortByRoleName = {};
-
-  roleOptions.forEach(role => {
-    sortByRoleName[role.label] = role.sortOrder || 9999;
-  });
+  const sortByRoleName = buildRoleSortMap_();
 
   return (claims || []).slice().sort((a, b) => {
     const aSort = sortByRoleName[a.role] || 9999;
@@ -1003,13 +1113,7 @@ function sortClaimsByRoleSort_(claims) {
 }
 
 function sortAnnouncementRolesByRoleSort_(roles) {
-  const roleOptions = loadNotionRoleOptions_();
-
-  const sortByRoleName = {};
-
-  roleOptions.forEach(role => {
-    sortByRoleName[role.label] = role.sortOrder || 9999;
-  });
+  const sortByRoleName = buildRoleSortMap_();
 
   return (roles || []).slice().sort((a, b) => {
     const aSort = sortByRoleName[a.role] || 9999;
@@ -1023,44 +1127,54 @@ function sortAnnouncementRolesByRoleSort_(roles) {
   });
 }
 
-function postSowReadyAfterClaimClose_(announcement) {
-  const projectId = announcement.project?.id || "";
-  const projectName = announcement.project?.name || "this project";
+function buildRoleSortMap_() {
+  const roleOptions = loadNotionRoleOptions_();
+  const sortByRoleName = {};
 
-  if (!projectId) {
-    return;
-  }
+  roleOptions.forEach(role => {
+    sortByRoleName[role.label] = role.sortOrder || 9999;
+  });
 
-  postSlackMessage_(
-    CONTRACTOR_CLAIMS_CHANNEL,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "🖨️ *SOWs Ready to Generate*\n\n" +
-            `The role announcement for *${projectName}* is now closed.\n\n` +
-            "All announced roles have been assigned.\n" +
-            "Please generate SOWs for the assigned contractors."
-        }
-      },
-      {
-        type: "actions",
-        elements: [
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "🖨️ Generate SOWs",
-              emoji: true
-            },
-            action_id: "sow_generate_for_project",
-            value: projectId
-          }
-        ]
-      }
-    ],
-    "SOWs Ready to Generate"
+  return sortByRoleName;
+}
+
+function formatClaimDate_(isoString) {
+  if (!isoString) return "-";
+
+  const date = new Date(isoString);
+
+  if (isNaN(date.getTime())) return "-";
+
+  const timezone = "America/Los_Angeles";
+  const month = Utilities.formatDate(date, timezone, "MMMM");
+  const day = Number(Utilities.formatDate(date, timezone, "d"));
+  const hour = Utilities.formatDate(date, timezone, "ha");
+
+  return `${month} ${day}${getDaySuffix_(day)}, ${hour}`;
+}
+
+function formatProjectDateForClaimDm_(dateValue) {
+  if (!dateValue) return "-";
+
+  const date = new Date(`${dateValue}T12:00:00`);
+
+  if (isNaN(date.getTime())) return dateValue;
+
+  return Utilities.formatDate(
+    date,
+    "America/Los_Angeles",
+    "MMMM d, yyyy"
   );
+}
+
+function getDaySuffix_(day) {
+  if (day >= 11 && day <= 13) return "th";
+
+  const lastDigit = day % 10;
+
+  if (lastDigit === 1) return "st";
+  if (lastDigit === 2) return "nd";
+  if (lastDigit === 3) return "rd";
+
+  return "th";
 }

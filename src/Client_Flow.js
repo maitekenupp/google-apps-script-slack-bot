@@ -1,3 +1,19 @@
+/******************************************************
+ *
+ * IZA
+ * File: Client_Flow.gs
+ *
+ * Purpose:
+ * Creates new clients through a Slack modal and saves
+ * the final client record in Notion.
+ *
+ ******************************************************/
+
+
+/************************************
+ * OPEN CLIENT MODALS
+ ************************************/
+
 function openClientModal_(userId, channelId, messageTs, triggerId) {
   const metadata = JSON.stringify({
     userId,
@@ -5,9 +21,10 @@ function openClientModal_(userId, channelId, messageTs, triggerId) {
     messageTs
   });
 
-  const view = buildClientModalView_(metadata);
-
-  openSlackModal_(triggerId, view);
+  openSlackModal_(
+    triggerId,
+    buildClientModalView_(metadata)
+  );
 }
 
 function openClientEditModal_(userId, channelId, messageTs, triggerId) {
@@ -17,8 +34,8 @@ function openClientEditModal_(userId, channelId, messageTs, triggerId) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildProjectsMenuBlocks_(),
-      "IZA Projects Menu"
+      buildAdminProjectsMenuBlocks_(),
+      "Projects"
     );
     return;
   }
@@ -29,13 +46,19 @@ function openClientEditModal_(userId, channelId, messageTs, triggerId) {
     messageTs
   });
 
-  const view = buildClientModalView_(
-    metadata,
-    session.clientData
+  openSlackModal_(
+    triggerId,
+    buildClientModalView_(
+      metadata,
+      session.clientData
+    )
   );
-
-  openSlackModal_(triggerId, view);
 }
+
+
+/************************************
+ * CLIENT MODAL VIEW
+ ************************************/
 
 function buildClientModalView_(privateMetadata, clientData) {
   clientData = clientData || {};
@@ -223,6 +246,11 @@ function buildClientModalView_(privateMetadata, clientData) {
   };
 }
 
+
+/************************************
+ * MODAL SUBMISSION
+ ************************************/
+
 function handleClientModalSubmit_(payload) {
   const metadata = JSON.parse(payload.view.private_metadata);
   const values = payload.view.state.values;
@@ -265,6 +293,11 @@ function handleClientModalSubmit_(payload) {
   return { response_action: "clear" };
 }
 
+
+/************************************
+ * REVIEW SCREEN
+ ************************************/
+
 function buildClientReviewBlocks_(clientData) {
   return [
     {
@@ -286,13 +319,18 @@ function buildClientReviewBlocks_(clientData) {
     {
       type: "actions",
       elements: [
-        button_("✅ Create Client", "client_create_confirm"),
+        primaryButton_("✅ Create Client", "client_create_confirm"),
         button_("✏️ Edit", "client_edit"),
-        button_("❌ Cancel", "client_create_cancel")
+        dangerButton_("❌ Cancel", "client_create_cancel")
       ]
     }
   ];
 }
+
+
+/************************************
+ * CREATE CLIENT
+ ************************************/
 
 function handleClientCreateConfirm_(userId, channelId, messageTs) {
   const session = getClientSession_(userId);
@@ -301,8 +339,8 @@ function handleClientCreateConfirm_(userId, channelId, messageTs) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildProjectsMenuBlocks_(),
-      "IZA Projects Menu"
+      buildAdminProjectsMenuBlocks_(),
+      "Projects"
     );
     return;
   }
@@ -323,18 +361,7 @@ function handleClientCreateConfirm_(userId, channelId, messageTs) {
   updateIzaMenu(
     channelId,
     messageTs,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "⏳ *Creating client in Notion...*\n\n" +
-            `*${clientName}*\n\n` +
-            "Please wait a moment."
-        }
-      }
-    ],
+    buildClientLoadingBlocks_(clientName),
     "Creating Client"
   );
 
@@ -357,26 +384,7 @@ function handleClientCreateConfirm_(userId, channelId, messageTs) {
     updateIzaMenu(
       channelId,
       messageTs,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "🎉 *Client created successfully!*\n\n" +
-              `*${clientName}*\n\n` +
-              `<${client.url}|📂 Open in Notion>`
-          }
-        },
-        {
-          type: "actions",
-          elements: [
-            button_("➕ New Project", "project_new"),
-            button_("📋 Projects", "menu_projects"),
-            button_("👋 Bye IZA", "menu_close")
-          ]
-        }
-      ],
+      buildClientCreatedBlocks_(clientName, client.url),
       "Client Created"
     );
 
@@ -390,26 +398,84 @@ function handleClientCreateConfirm_(userId, channelId, messageTs) {
     updateIzaMenu(
       channelId,
       messageTs,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "❌ *I had trouble creating this client in Notion.*\n\n" +
-              `*${clientName}*\n\n` +
-              `Error: ${err.message}`
-          }
-        },
-        {
-          type: "actions",
-          elements: [
-            button_("⬅️ Projects", "menu_projects"),
-            button_("🏠 Main Menu", "menu_main")
-          ]
-        }
-      ],
+      buildClientCreateFailedBlocks_(clientName, err.message),
       "Client Creation Failed"
     );
   }
+}
+
+function buildClientLoadingBlocks_(clientName) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "⏳ *Creating client in Notion...*\n\n" +
+          `*${clientName}*\n\n` +
+          "Please wait a moment."
+      }
+    }
+  ];
+}
+
+function buildClientCreatedBlocks_(clientName, notionUrl) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "🎉 *Client created successfully!*\n\n" +
+          `*${clientName}*\n\n` +
+          `<${notionUrl}|📂 Open in Notion>`
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("➕ New Project", "project_new"),
+        button_("📁 Projects", "admin_projects_menu"),
+        button_("👋 Bye IZA", "menu_close")
+      ]
+    }
+  ];
+}
+
+function buildClientCreateFailedBlocks_(clientName, errorMessage) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "❌ *I had trouble creating this client in Notion.*\n\n" +
+          `*${clientName}*\n\n` +
+          `Error: ${errorMessage}`
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Projects", "admin_projects_menu"),
+        button_("🐞 Report Bug", "bug_report")
+      ]
+    }
+  ];
+}
+
+
+/************************************
+ * CANCEL CLIENT
+ ************************************/
+
+function handleClientCreateCancel_(userId, channelId, messageTs) {
+  clearClientSession_(userId);
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildAdminProjectsMenuBlocks_(),
+    "Projects"
+  );
 }

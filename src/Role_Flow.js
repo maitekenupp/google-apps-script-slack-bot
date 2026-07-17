@@ -1,12 +1,28 @@
+/******************************************************
+ *
+ * IZA
+ * File: Role_Flow.gs
+ *
+ * Purpose:
+ * Slack-guided flow for adding roles to a project.
+ *
+ ******************************************************/
+
+
+/************************************
+ * START ROLE FLOW
+ ************************************/
+
 function startRoleFlow_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.createdProject) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildProjectsMenuBlocks_(),
-      "IZA Projects Menu"
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
     );
     return;
   }
@@ -17,7 +33,10 @@ function startRoleFlow_(userId, channelId, messageTs) {
   session.currentRoleDraft = {};
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -26,6 +45,11 @@ function startRoleFlow_(userId, channelId, messageTs) {
     "Role Pricing"
   );
 }
+
+
+/************************************
+ * STEP 1: PRICING
+ ************************************/
 
 function buildRolePricingBlocks_(session) {
   session = session || {};
@@ -37,7 +61,7 @@ function buildRolePricingBlocks_(session) {
         type: "mrkdwn",
         text:
           "👥 *Add Project Roles*\n\n" +
-          "*Step 1: Pricing*\n\n" +
+          "*Step 1 of 3: Pricing*\n\n" +
           `*Project:* ${getRoleProjectName_(session)}\n\n` +
           "Is this project using CDEF pricing?"
       }
@@ -52,23 +76,29 @@ function buildRolePricingBlocks_(session) {
     {
       type: "actions",
       elements: [
-        button_("❌ Cancel", "roles_cancel")
+        dangerButton_("❌ Cancel", "roles_cancel")
       ]
     }
   ];
 }
 
 function handleRolePricingSelect_(userId, channelId, messageTs, isCdef) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
-  if (!session) return;
+  if (!session) {
+    return;
+  }
 
   session.isCdefPricing = isCdef;
   session.roleStep = "select_role";
   session.currentRoleDraft = {};
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -78,14 +108,24 @@ function handleRolePricingSelect_(userId, channelId, messageTs, isCdef) {
   );
 }
 
+
+/************************************
+ * STEP 2: SELECT ROLE
+ ************************************/
+
 function buildRoleSelectBlocks_(session) {
   session = session || {};
 
-  const roleOptions = loadNotionRoleOptions_();
-  const currentRole = session.currentRoleDraft || {};
-  const selectedRole = roleOptions.find(
-    role => role.id === currentRole.roleId
-  );
+  const roleOptions =
+    loadNotionRoleOptions_();
+
+  const currentRole =
+    session.currentRoleDraft || {};
+
+  const selectedRole =
+    roleOptions.find(role =>
+      role.id === currentRole.roleId
+    );
 
   const roleSelect = {
     type: "static_select",
@@ -95,14 +135,15 @@ function buildRoleSelectBlocks_(session) {
       text: "Select a role",
       emoji: true
     },
-    options: roleOptions.map(role => ({
-      text: {
-        type: "plain_text",
-        text: role.label,
-        emoji: true
-      },
-      value: role.id
-    }))
+    options:
+      roleOptions.map(role => ({
+        text: {
+          type: "plain_text",
+          text: role.label,
+          emoji: true
+        },
+        value: role.id
+      }))
   };
 
   if (selectedRole) {
@@ -119,10 +160,14 @@ function buildRoleSelectBlocks_(session) {
   const navigationButtons = [];
 
   if (currentRole.roleId) {
-    navigationButtons.push(button_("Next", "role_select_next"));
+    navigationButtons.push(
+      button_("Next", "role_select_next")
+    );
   }
 
-  navigationButtons.push(button_("❌ Cancel", "roles_cancel"));
+  navigationButtons.push(
+    dangerButton_("❌ Cancel", "roles_cancel")
+  );
 
   return [
     {
@@ -131,7 +176,7 @@ function buildRoleSelectBlocks_(session) {
         type: "mrkdwn",
         text:
           "👥 *Add Project Role*\n\n" +
-          "*Step 2: Select Role*\n\n" +
+          "*Step 2 of 3: Select Role*\n\n" +
           `*Project:* ${getRoleProjectName_(session)}\n` +
           `*Pricing:* ${session.isCdefPricing ? "CDEF ($125)" : "Standard"}\n` +
           `*Selected Role:* ${currentRole.roleName || "-"}`
@@ -139,7 +184,9 @@ function buildRoleSelectBlocks_(session) {
     },
     {
       type: "actions",
-      elements: [roleSelect]
+      elements: [
+        roleSelect
+      ]
     },
     {
       type: "actions",
@@ -149,23 +196,35 @@ function buildRoleSelectBlocks_(session) {
 }
 
 function handleRoleSelect_(payload) {
-  const context = getSlackActionContext_(payload);
-  const selectedRoleId = payload.actions[0].selected_option.value;
+  const context =
+    getSlackActionContext_(payload);
 
-  const session = getProjectSession_(context.userId);
+  const selectedRoleId =
+    payload.actions[0].selected_option.value;
 
-  if (!session) return;
+  const session =
+    getProjectSession_(context.userId);
 
-  const roleOptions = loadNotionRoleOptions_();
-  const selectedRole = roleOptions.find(
-    role => role.id === selectedRoleId
-  );
+  if (!session) {
+    return;
+  }
 
-  if (!selectedRole) return;
+  const roleOptions =
+    loadNotionRoleOptions_();
 
-  const rate = session.isCdefPricing
-    ? 125
-    : selectedRole.defaultCompanyRate;
+  const selectedRole =
+    roleOptions.find(role =>
+      role.id === selectedRoleId
+    );
+
+  if (!selectedRole) {
+    return;
+  }
+
+  const rate =
+    session.isCdefPricing
+      ? 125
+      : selectedRole.defaultCompanyRate;
 
   session.roleStep = "select_role";
   session.currentRoleDraft = {
@@ -176,7 +235,10 @@ function handleRoleSelect_(payload) {
   };
   session.lastActivity = Date.now();
 
-  saveProjectSession_(context.userId, session);
+  saveProjectSession_(
+    context.userId,
+    session
+  );
 
   updateIzaMenu(
     context.channelId,
@@ -186,9 +248,9 @@ function handleRoleSelect_(payload) {
   );
 }
 
-
 function handleRoleSelectNext_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.currentRoleDraft?.roleId) {
     updateIzaMenu(
@@ -203,7 +265,10 @@ function handleRoleSelectNext_(userId, channelId, messageTs) {
   session.roleStep = "details";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -213,20 +278,30 @@ function handleRoleSelectNext_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * STEP 3: ROLE DETAILS
+ ************************************/
+
 function buildRoleDetailsPromptBlocks_(session) {
   session = session || {};
 
-  const role = session.currentRoleDraft || {};
+  const role =
+    session.currentRoleDraft || {};
 
   const navigationButtons = [
     button_("Previous", "role_details_previous")
   ];
 
   if (role.hoursToClient && role.hoursToContractor) {
-    navigationButtons.push(button_("Next", "role_details_next"));
+    navigationButtons.push(
+      button_("Next", "role_details_next")
+    );
   }
 
-  navigationButtons.push(button_("❌ Cancel", "roles_cancel"));
+  navigationButtons.push(
+    dangerButton_("❌ Cancel", "roles_cancel")
+  );
 
   return [
     {
@@ -235,7 +310,7 @@ function buildRoleDetailsPromptBlocks_(session) {
         type: "mrkdwn",
         text:
           "👥 *Add Project Role*\n\n" +
-          "*Step 2 of 3: Role Details*\n\n" +
+          "*Step 3 of 3: Role Details*\n\n" +
           `*Project:* ${getRoleProjectName_(session)}\n` +
           `*Role:* ${role.roleName || "-"}\n` +
           `*Company Rate:* $${role.companyRate || 0} / ${role.unit || "-"}\n` +
@@ -259,7 +334,8 @@ function buildRoleDetailsPromptBlocks_(session) {
 }
 
 function openRoleDetailsModal_(userId, channelId, messageTs, triggerId) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.currentRoleDraft?.roleId) {
     updateIzaMenu(
@@ -271,15 +347,19 @@ function openRoleDetailsModal_(userId, channelId, messageTs, triggerId) {
     return;
   }
 
-  const metadata = JSON.stringify({
-    userId,
-    channelId,
-    messageTs
-  });
+  const metadata =
+    JSON.stringify({
+      userId,
+      channelId,
+      messageTs
+    });
 
   openSlackModal_(
     triggerId,
-    buildRoleDetailsModalView_(metadata, session.currentRoleDraft)
+    buildRoleDetailsModalView_(
+      metadata,
+      session.currentRoleDraft
+    )
   );
 }
 
@@ -368,22 +448,26 @@ function buildRoleDetailsModalView_(privateMetadata, roleDraft) {
 }
 
 function handleRoleDetailsSubmit_(payload) {
-  const metadata = JSON.parse(payload.view.private_metadata);
-  const values = payload.view.state.values;
+  const metadata =
+    JSON.parse(payload.view.private_metadata);
 
-  const session = getProjectSession_(metadata.userId);
+  const values =
+    payload.view.state.values;
+
+  const session =
+    getProjectSession_(metadata.userId);
 
   if (!session || !session.currentRoleDraft) {
-    return { response_action: "clear" };
+    return {
+      response_action: "clear"
+    };
   }
 
-  const hoursToClient = Number(
-    values.hours_client_block.hours_client_value.value
-  );
+  const hoursToClient =
+    Number(values.hours_client_block.hours_client_value.value);
 
-  const hoursToContractor = Number(
-    values.hours_contractor_block.hours_contractor_value.value
-  );
+  const hoursToContractor =
+    Number(values.hours_contractor_block.hours_contractor_value.value);
 
   if (!hoursToClient || hoursToClient <= 0) {
     return {
@@ -412,7 +496,10 @@ function handleRoleDetailsSubmit_(payload) {
     hoursToClient * Number(session.currentRoleDraft.companyRate || 0);
   session.lastActivity = Date.now();
 
-  saveProjectSession_(metadata.userId, session);
+  saveProjectSession_(
+    metadata.userId,
+    session
+  );
 
   updateIzaMenu(
     metadata.channelId,
@@ -421,11 +508,14 @@ function handleRoleDetailsSubmit_(payload) {
     "Role Details"
   );
 
-  return { response_action: "clear" };
+  return {
+    response_action: "clear"
+  };
 }
 
 function handleRoleDetailsPrevious_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   updateIzaMenu(
     channelId,
@@ -436,8 +526,11 @@ function handleRoleDetailsPrevious_(userId, channelId, messageTs) {
 }
 
 function handleRoleDetailsNext_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
-  const role = session?.currentRoleDraft || {};
+  const session =
+    getProjectSession_(userId);
+
+  const role =
+    session?.currentRoleDraft || {};
 
   if (!role.hoursToClient || !role.hoursToContractor) {
     updateIzaMenu(
@@ -452,7 +545,10 @@ function handleRoleDetailsNext_(userId, channelId, messageTs) {
   session.roleStep = "review_role";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -462,8 +558,14 @@ function handleRoleDetailsNext_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * REVIEW ROLE
+ ************************************/
+
 function buildRoleReviewBlocks_(session) {
-  const role = session.currentRoleDraft || {};
+  const role =
+    session.currentRoleDraft || {};
 
   return [
     {
@@ -485,15 +587,16 @@ function buildRoleReviewBlocks_(session) {
       type: "actions",
       elements: [
         button_("Previous", "role_review_previous"),
-        button_("Add Role", "role_add_to_list"),
-        button_("❌ Cancel", "roles_cancel")
+        primaryButton_("Add Role", "role_add_to_list"),
+        dangerButton_("❌ Cancel", "roles_cancel")
       ]
     }
   ];
 }
 
 function handleRoleReviewPrevious_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   updateIzaMenu(
     channelId,
@@ -504,9 +607,12 @@ function handleRoleReviewPrevious_(userId, channelId, messageTs) {
 }
 
 function handleRoleAddToList_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
-  if (!session || !session.currentRoleDraft?.roleId) return;
+  if (!session || !session.currentRoleDraft?.roleId) {
+    return;
+  }
 
   session.roleDrafts = session.roleDrafts || [];
   session.roleDrafts.push(session.currentRoleDraft);
@@ -514,7 +620,10 @@ function handleRoleAddToList_(userId, channelId, messageTs) {
   session.roleStep = "summary";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -524,32 +633,46 @@ function handleRoleAddToList_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * ROLES SUMMARY
+ ************************************/
+
 function buildRolesSummaryBlocks_(session) {
-  const roles = session.roleDrafts || [];
+  const roles =
+    session.roleDrafts || [];
 
-  const roleLines = roles.length
-    ? roles.map((role, index) =>
-        `${index + 1}. *${role.roleName}* — ` +
-        `${role.hoursToClient} client hrs / ` +
-        `${role.hoursToContractor} contractor hrs — ` +
-        `$${Number(role.total || 0).toLocaleString()}`
-      ).join("\n")
-    : "No roles added yet.";
+  const roleLines =
+    roles.length
+      ? roles
+          .map((role, index) =>
+            `${index + 1}. *${role.roleName}* — ` +
+            `${role.hoursToClient} client hrs / ` +
+            `${role.hoursToContractor} contractor hrs — ` +
+            `$${Number(role.total || 0).toLocaleString()}`
+          )
+          .join("\n")
+      : "No roles added yet.";
 
-  const total = roles.reduce(
-    (sum, role) => sum + Number(role.total || 0),
-    0
-  );
+  const total =
+    roles.reduce(
+      (sum, role) => sum + Number(role.total || 0),
+      0
+    );
 
   const actionButtons = [
     button_("➕ Add Another Role", "role_add_another")
   ];
 
   if (roles.length > 0) {
-    actionButtons.push(button_("✅ Create Roles", "roles_create_confirm"));
+    actionButtons.push(
+      primaryButton_("✅ Create Roles", "roles_create_confirm")
+    );
   }
 
-  actionButtons.push(button_("❌ Cancel", "roles_cancel"));
+  actionButtons.push(
+    dangerButton_("❌ Cancel", "roles_cancel")
+  );
 
   return [
     {
@@ -571,15 +694,21 @@ function buildRolesSummaryBlocks_(session) {
 }
 
 function handleRoleAddAnother_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
-  if (!session) return;
+  if (!session) {
+    return;
+  }
 
   session.currentRoleDraft = {};
   session.roleStep = "select_role";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -589,15 +718,21 @@ function handleRoleAddAnother_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * CREATE ROLES IN NOTION
+ ************************************/
+
 function handleRolesCreateConfirm_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.createdProject || !session.roleDrafts?.length) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildProjectsMenuBlocks_(),
-      "IZA Projects Menu"
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
     );
     return;
   }
@@ -609,27 +744,21 @@ function handleRolesCreateConfirm_(userId, channelId, messageTs) {
     return;
   }
 
-  const projectName = getRoleProjectName_(session);
+  const projectName =
+    getRoleProjectName_(session);
 
   session.status = "creating_roles";
   session.lastActivity = Date.now();
-  saveProjectSession_(userId, session);
+
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
     messageTs,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "⏳ *Creating roles in Notion...*\n\n" +
-            `*${projectName}*\n\n` +
-            "Please wait a moment."
-        }
-      }
-    ],
+    buildRolesCreatingBlocks_(projectName),
     "Creating Roles"
   );
 
@@ -649,30 +778,15 @@ function handleRolesCreateConfirm_(userId, channelId, messageTs) {
     session.status = "roles_created";
     session.lastActivity = Date.now();
 
-    saveProjectSession_(userId, session);
+    saveProjectSession_(
+      userId,
+      session
+    );
 
     updateIzaMenu(
       channelId,
       messageTs,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "🎉 *Roles created successfully!*\n\n" +
-              `Added ${session.roleDrafts.length} role(s) to *${projectName}*.`
-          }
-        },
-        {
-          type: "actions",
-          elements: [
-            button_("👷 Assign Contractors", "contractor_assign_start"),
-            button_("📋 Projects", "menu_projects"),
-            button_("👋 Bye IZA", "menu_close")
-          ]
-        }
-      ],
+      buildRolesCreatedBlocks_(session, projectName),
       "Roles Created"
     );
 
@@ -681,53 +795,113 @@ function handleRolesCreateConfirm_(userId, channelId, messageTs) {
     session.lastError = err.message;
     session.lastActivity = Date.now();
 
-    saveProjectSession_(userId, session);
+    saveProjectSession_(
+      userId,
+      session
+    );
 
     updateIzaMenu(
       channelId,
       messageTs,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "❌ *I had trouble creating the roles in Notion.*\n\n" +
-              `Error: ${err.message}`
-          }
-        },
-        {
-          type: "actions",
-          elements: [
-            button_("⬅️ Projects", "menu_projects"),
-            button_("🏠 Main Menu", "menu_main")
-          ]
-        }
-      ],
+      buildRolesCreateFailedBlocks_(err),
       "Role Creation Failed"
     );
   }
 }
 
+function buildRolesCreatingBlocks_(projectName) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "⏳ *Creating roles in Notion...*\n\n" +
+          `*${projectName}*\n\n` +
+          "Please wait a moment."
+      }
+    }
+  ];
+}
+
+function buildRolesCreatedBlocks_(session, projectName) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "🎉 *Roles created successfully!*\n\n" +
+          `Added ${session.roleDrafts.length} role(s) to *${projectName}*.`
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("👷 Assign Contractors", "contractor_assign_start"),
+        button_("📁 Projects", "admin_projects_menu"),
+        button_("👋 Bye IZA", "menu_close")
+      ]
+    }
+  ];
+}
+
+function buildRolesCreateFailedBlocks_(err) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "❌ *I had trouble creating the roles in Notion.*\n\n" +
+          `Error: ${err.message}`
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Projects", "admin_projects_menu"),
+        button_("🏠 Main Menu", "menu_main")
+      ]
+    }
+  ];
+}
+
+
+/************************************
+ * CANCEL
+ ************************************/
+
 function handleRolesCancel_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (session) {
     delete session.currentRoleDraft;
     delete session.roleDrafts;
     delete session.roleStep;
+
     session.status = "project_created";
     session.lastActivity = Date.now();
-    saveProjectSession_(userId, session);
+
+    saveProjectSession_(
+      userId,
+      session
+    );
   }
 
   updateIzaMenu(
     channelId,
     messageTs,
-    buildProjectsMenuBlocks_(),
-    "IZA Projects Menu"
+    buildAdminProjectsMenuBlocks_(),
+    "Admin Projects"
   );
 }
+
+
+/************************************
+ * HELPERS
+ ************************************/
 
 function getRoleProjectName_(session) {
   return (

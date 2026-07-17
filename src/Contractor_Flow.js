@@ -1,25 +1,51 @@
+/******************************************************
+ *
+ * IZA
+ * File: Contractor_Flow.gs
+ *
+ * Purpose:
+ * Assigns contractors to project roles and manages public
+ * role claim announcements.
+ *
+ ******************************************************/
+
+
+/************************************
+ * START CONTRACTOR FLOW
+ ************************************/
+
 function startContractorFlow_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.createdProject || !session.roleDrafts?.length) {
-    updateIzaMenu(channelId, messageTs, buildProjectsMenuBlocks_(), "Projects");
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
+    );
     return;
   }
 
   session.status = "assigning_contractors";
   session.contractorStep = 0;
-  session.contractorAssignments = session.roleDrafts.map(role => ({
-    role: role.roleName,
-    hours: role.hoursToContractor,
-    deliverables: role.deliverables || "",
-    contractorId: "",
-    contractorName: "",
-    rate: 0,
-    total: 0,
-    isAnnouncement: false
-  }));
+  session.contractorAssignments =
+    session.roleDrafts.map(role => ({
+      role: role.roleName,
+      hours: role.hoursToContractor,
+      deliverables: role.deliverables || "",
+      contractorId: "",
+      contractorName: "",
+      rate: 0,
+      total: 0,
+      isAnnouncement: false
+    }));
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -29,13 +55,28 @@ function startContractorFlow_(userId, channelId, messageTs) {
   );
 }
 
-function buildContractorAssignmentBlocks_(session) {
-  const assignments = session.contractorAssignments || [];
-  const index = session.contractorStep || 0;
-  const assignment = assignments[index] || {};
-  const contractors = loadContractorOptions_();
 
-  const selected = contractors.find(c => c.id === assignment.contractorId);
+/************************************
+ * ASSIGN CONTRACTOR STEP
+ ************************************/
+
+function buildContractorAssignmentBlocks_(session) {
+  const assignments =
+    session.contractorAssignments || [];
+
+  const index =
+    session.contractorStep || 0;
+
+  const assignment =
+    assignments[index] || {};
+
+  const contractors =
+    loadContractorOptions_();
+
+  const selected =
+    contractors.find(contractor =>
+      contractor.id === assignment.contractorId
+    );
 
   const contractorSelect = {
     type: "static_select",
@@ -45,14 +86,15 @@ function buildContractorAssignmentBlocks_(session) {
       text: "Select contractor",
       emoji: true
     },
-    options: contractors.map(contractor => ({
-      text: {
-        type: "plain_text",
-        text: contractor.label,
-        emoji: true
-      },
-      value: contractor.id
-    }))
+    options:
+      contractors.map(contractor => ({
+        text: {
+          type: "plain_text",
+          text: contractor.label,
+          emoji: true
+        },
+        value: contractor.id
+      }))
   };
 
   if (selected) {
@@ -69,14 +111,20 @@ function buildContractorAssignmentBlocks_(session) {
   const buttons = [];
 
   if (index > 0) {
-    buttons.push(button_("Previous", "contractor_previous"));
+    buttons.push(
+      button_("Previous", "contractor_previous")
+    );
   }
 
   if (assignment.contractorId) {
-    buttons.push(button_("Next", "contractor_next"));
+    buttons.push(
+      button_("Next", "contractor_next")
+    );
   }
 
-  buttons.push(button_("❌ Cancel", "contractor_cancel"));
+  buttons.push(
+    dangerButton_("❌ Cancel", "contractor_cancel")
+  );
 
   return [
     {
@@ -94,7 +142,9 @@ function buildContractorAssignmentBlocks_(session) {
     },
     {
       type: "actions",
-      elements: [contractorSelect]
+      elements: [
+        contractorSelect
+      ]
     },
     {
       type: "actions",
@@ -104,10 +154,14 @@ function buildContractorAssignmentBlocks_(session) {
 }
 
 function handleContractorSelect_(payload) {
-  const context = getSlackActionContext_(payload);
-  const selectedContractorId = payload.actions[0].selected_option.value;
+  const context =
+    getSlackActionContext_(payload);
 
-  const session = getProjectSession_(context.userId);
+  const selectedContractorId =
+    payload.actions[0].selected_option.value;
+
+  const session =
+    getProjectSession_(context.userId);
 
   if (
     !session ||
@@ -118,13 +172,14 @@ function handleContractorSelect_(payload) {
     updateIzaMenu(
       context.channelId,
       context.messageTs,
-      buildProjectsMenuBlocks_(),
-      "Projects"
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
     );
     return;
   }
 
-  let index = Number(session.contractorStep);
+  let index =
+    Number(session.contractorStep);
 
   if (
     Number.isNaN(index) ||
@@ -135,7 +190,8 @@ function handleContractorSelect_(payload) {
     session.contractorStep = 0;
   }
 
-  const assignment = session.contractorAssignments[index];
+  const assignment =
+    session.contractorAssignments[index];
 
   if (!assignment) {
     updateIzaMenu(
@@ -147,8 +203,13 @@ function handleContractorSelect_(payload) {
     return;
   }
 
-  const contractors = loadContractorOptions_();
-  const contractor = contractors.find(c => c.id === selectedContractorId);
+  const contractors =
+    loadContractorOptions_();
+
+  const contractor =
+    contractors.find(item =>
+      item.id === selectedContractorId
+    );
 
   if (!contractor) {
     updateIzaMenu(
@@ -164,19 +225,35 @@ function handleContractorSelect_(payload) {
     contractor.name === "x.Announce Role" ||
     contractor.label === "x.Announce Role";
 
-  assignment.contractorId = contractor.id;
-  assignment.contractorName = contractor.name || contractor.label;
-  assignment.rate = isAnnouncement ? 0 : Number(contractor.rate || 0);
+  assignment.contractorId =
+    contractor.id;
+
+  assignment.contractorName =
+    contractor.name || contractor.label;
+
+  assignment.rate =
+    isAnnouncement
+      ? 0
+      : Number(contractor.rate || 0);
+
   assignment.total =
     isAnnouncement
       ? 0
       : assignment.rate * Number(assignment.hours || 0);
-  assignment.isAnnouncement = isAnnouncement;
 
-  session.contractorAssignments[index] = assignment;
-  session.lastActivity = Date.now();
+  assignment.isAnnouncement =
+    isAnnouncement;
 
-  saveProjectSession_(context.userId, session);
+  session.contractorAssignments[index] =
+    assignment;
+
+  session.lastActivity =
+    Date.now();
+
+  saveProjectSession_(
+    context.userId,
+    session
+  );
 
   updateIzaMenu(
     context.channelId,
@@ -187,11 +264,20 @@ function handleContractorSelect_(payload) {
 }
 
 function handleContractorPrevious_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
-  if (!session) return;
+  const session =
+    getProjectSession_(userId);
 
-  session.contractorStep = Math.max(0, (session.contractorStep || 0) - 1);
-  saveProjectSession_(userId, session);
+  if (!session) {
+    return;
+  }
+
+  session.contractorStep =
+    Math.max(0, (session.contractorStep || 0) - 1);
+
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -202,20 +288,36 @@ function handleContractorPrevious_(userId, channelId, messageTs) {
 }
 
 function handleContractorNext_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
-  if (!session) return;
+  const session =
+    getProjectSession_(userId);
 
-  const assignments = session.contractorAssignments || [];
-  const index = session.contractorStep || 0;
+  if (!session) {
+    return;
+  }
+
+  const assignments =
+    session.contractorAssignments || [];
+
+  const index =
+    session.contractorStep || 0;
 
   if (!assignments[index]?.contractorId) {
-    updateIzaMenu(channelId, messageTs, buildContractorAssignmentBlocks_(session), "Assign Contractors");
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildContractorAssignmentBlocks_(session),
+      "Assign Contractors"
+    );
     return;
   }
 
   if (index >= assignments.length - 1) {
     session.contractorStep = "review";
-    saveProjectSession_(userId, session);
+
+    saveProjectSession_(
+      userId,
+      session
+    );
 
     updateIzaMenu(
       channelId,
@@ -226,8 +328,13 @@ function handleContractorNext_(userId, channelId, messageTs) {
     return;
   }
 
-  session.contractorStep = index + 1;
-  saveProjectSession_(userId, session);
+  session.contractorStep =
+    index + 1;
+
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -237,19 +344,31 @@ function handleContractorNext_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * REVIEW ASSIGNMENTS
+ ************************************/
+
 function buildContractorReviewBlocks_(session) {
-  const assignments = session.contractorAssignments || [];
+  const assignments =
+    session.contractorAssignments || [];
 
-  const lines = assignments.map((assignment, index) =>
-    `${index + 1}. *${assignment.role}*\n` +
-    `Contractor: ${assignment.contractorName}\n` +
-    `Hours: ${assignment.hours}\n` +
-    `Rate: $${assignment.rate}/hr\n` +
-    `Total: $${Number(assignment.total || 0).toLocaleString()}`
-  ).join("\n\n");
+  const lines =
+    assignments
+      .map((assignment, index) =>
+        `${index + 1}. *${assignment.role}*\n` +
+        `Contractor: ${assignment.contractorName}\n` +
+        `Hours: ${assignment.hours}\n` +
+        `Rate: $${assignment.rate}/hr\n` +
+        `Total: $${Number(assignment.total || 0).toLocaleString()}`
+      )
+      .join("\n\n");
 
-  const assignedCount = assignments.filter(a => !a.isAnnouncement).length;
-  const announceCount = assignments.filter(a => a.isAnnouncement).length;
+  const assignedCount =
+    assignments.filter(assignment => !assignment.isAnnouncement).length;
+
+  const announceCount =
+    assignments.filter(assignment => assignment.isAnnouncement).length;
 
   return [
     {
@@ -268,19 +387,31 @@ function buildContractorReviewBlocks_(session) {
       type: "actions",
       elements: [
         button_("Previous", "contractor_review_previous"),
-        button_("✅ Create Assignments", "contractor_create_confirm"),
-        button_("❌ Cancel", "contractor_cancel")
+        primaryButton_("✅ Create Assignments", "contractor_create_confirm"),
+        dangerButton_("❌ Cancel", "contractor_cancel")
       ]
     }
   ];
 }
 
 function handleContractorReviewPrevious_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
-  if (!session) return;
+  const session =
+    getProjectSession_(userId);
 
-  session.contractorStep = Math.max(0, (session.contractorAssignments || []).length - 1);
-  saveProjectSession_(userId, session);
+  if (!session) {
+    return;
+  }
+
+  session.contractorStep =
+    Math.max(
+      0,
+      (session.contractorAssignments || []).length - 1
+    );
+
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -290,11 +421,22 @@ function handleContractorReviewPrevious_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * CREATE ASSIGNMENTS
+ ************************************/
+
 function handleContractorCreateConfirm_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.contractorAssignments?.length) {
-    updateIzaMenu(channelId, messageTs, buildProjectsMenuBlocks_(), "Projects");
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
+    );
     return;
   }
 
@@ -305,25 +447,21 @@ function handleContractorCreateConfirm_(userId, channelId, messageTs) {
     return;
   }
 
-  const projectId = session.createdProject.id;
+  const projectId =
+    session.createdProject.id;
 
-  session.status = "creating_contractor_assignments";
-  saveProjectSession_(userId, session);
+  session.status =
+    "creating_contractor_assignments";
+
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
     messageTs,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "⏳ *Creating contractor assignments...*\n\n" +
-            `*${getContractorProjectName_(session)}*`
-        }
-      }
-    ],
+    buildContractorCreatingBlocks_(session),
     "Creating Contractor Assignments"
   );
 
@@ -360,64 +498,108 @@ function handleContractorCreateConfirm_(userId, channelId, messageTs) {
       .getScriptCache()
       .remove("PROJECTS_NEEDING_CONTRACTORS");
 
-    session.status = "contractor_assignments_created";
-    saveProjectSession_(userId, session);
+    session.status =
+      "contractor_assignments_created";
+
+    saveProjectSession_(
+      userId,
+      session
+    );
 
     updateIzaMenu(
       channelId,
       messageTs,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "🎉 *Contractor assignment completed!*\n\n" +
-              `*Project:* ${getContractorProjectName_(session)}\n` +
-              `*Assigned:* ${assignedCount}\n` +
-              `*Announced:* ${rolesToAnnounce.length}`
-          }
-        },
-        {
-          type: "actions",
-          elements: buildContractorAssignmentSuccessButtons_(
-            projectId,
-            assignedCount > 0
-          )
-        }
-      ],
+      buildContractorAssignmentCompletedBlocks_(
+        session,
+        projectId,
+        assignedCount,
+        rolesToAnnounce.length
+      ),
       "Contractors Assigned"
     );
 
   } catch (err) {
-    session.status = "contractor_assignment_failed";
-    session.lastError = err.message;
-    saveProjectSession_(userId, session);
+    session.status =
+      "contractor_assignment_failed";
+
+    session.lastError =
+      err.message;
+
+    saveProjectSession_(
+      userId,
+      session
+    );
 
     updateIzaMenu(
       channelId,
       messageTs,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "❌ *I had trouble assigning contractors.*\n\n" +
-              `Error: ${err.message}`
-          }
-        },
-        {
-          type: "actions",
-          elements: [
-            button_("⬅️ Back", "projects_admin_menu"),
-            button_("🏠 Main Menu", "menu_main")
-          ]
-        }
-      ],
+      buildContractorAssignmentFailedBlocks_(err),
       "Contractor Assignment Failed"
     );
   }
+}
+
+function buildContractorCreatingBlocks_(session) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "⏳ *Creating contractor assignments...*\n\n" +
+          `*${getContractorProjectName_(session)}*`
+      }
+    }
+  ];
+}
+
+function buildContractorAssignmentCompletedBlocks_(
+    session,
+    projectId,
+    assignedCount,
+    announcedCount
+  ) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "🎉 *Contractor assignment completed!*\n\n" +
+          `*Project:* ${getContractorProjectName_(session)}\n` +
+          `*Assigned:* ${assignedCount}\n` +
+          `*Announced:* ${announcedCount}`
+      }
+    },
+    {
+      type: "actions",
+      elements: buildContractorAssignmentSuccessButtons_(
+        projectId,
+        assignedCount > 0
+      )
+    }
+  ];
+}
+
+function buildContractorAssignmentFailedBlocks_(err) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "❌ *I had trouble assigning contractors.*\n\n" +
+          `Error: ${err.message}`
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", "admin_projects_menu"),
+        button_("🏠 Main Menu", "menu_main")
+      ]
+    }
+  ];
 }
 
 function buildContractorAssignmentSuccessButtons_(projectId, canGenerateSows) {
@@ -437,10 +619,15 @@ function buildContractorAssignmentSuccessButtons_(projectId, canGenerateSows) {
   }
 
   return [
-    button_("⬅️ Back", "projects_admin_menu"),
+    button_("⬅️ Back", "admin_projects_menu"),
     button_("👋 Bye IZA", "menu_close")
   ];
 }
+
+
+/************************************
+ * ROLE ANNOUNCEMENT
+ ************************************/
 
 function postContractorRoleAnnouncement_(session, rolesToAnnounce) {
   const project = {
@@ -455,47 +642,34 @@ function postContractorRoleAnnouncement_(session, rolesToAnnounce) {
     findOpenAnnouncementForProject_(project.id);
 
   if (existingAnnouncement) {
-    postSlackMessage_(
-      CONTRACTOR_OPPORTUNITIES_CHANNEL,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "⚠️ *Project already announced*\n\n" +
-              `*Project:* ${project.name}\n\n` +
-              "This project already has an open role announcement. Please use the existing announcement instead of reposting."
-          }
-        }
-      ],
-      "Project already announced"
-    );
-
+    postDuplicateRoleAnnouncementWarning_(project);
     return;
   }
 
   const announcementKey =
     `ROLE_CLAIM_${project.id}_${Date.now()}`;
 
-  PropertiesService.getScriptProperties().setProperty(
-    announcementKey,
-    JSON.stringify({
-      project,
-      roles: rolesToAnnounce,
-      claims: [],
-      claimNotifications: [],
-      closed: false
-    })
+  PropertiesService
+    .getScriptProperties()
+    .setProperty(
+      announcementKey,
+      JSON.stringify({
+        project,
+        roles: rolesToAnnounce,
+        claims: [],
+        claimNotifications: [],
+        closed: false
+      })
+    );
+
+  postSlackMessage_(
+    CONTRACTOR_OPPORTUNITIES_CHANNEL,
+    buildRoleAnnouncementBlocks_(announcementKey, project, rolesToAnnounce),
+    "New Project Opportunity"
   );
+}
 
-  const roleLines = rolesToAnnounce
-    .map(role =>
-      `*${role.role}* — ${role.hours} hrs\n` +
-      `${role.deliverables || "-"}`
-    )
-    .join("\n\n");
-
+function postDuplicateRoleAnnouncementWarning_(project) {
   postSlackMessage_(
     CONTRACTOR_OPPORTUNITIES_CHANNEL,
     [
@@ -504,42 +678,78 @@ function postContractorRoleAnnouncement_(session, rolesToAnnounce) {
         text: {
           type: "mrkdwn",
           text:
-            ":rotating_light: *New Project Opportunity* :rotating_light:\n\n" +
-            `*Project:* ${project.name}\n` +
-            `*Objective:* ${project.description || "-"}\n` +
-            `*Start date:* ${project.startDate || "-"}\n` +
-            `*End date:* ${project.endDate || "-"}\n\n` +
-            "*Available Roles:*\n\n" +
-            roleLines +
-            "\n\n" +
-            ":warning: *Before claiming:*\n" +
-            "• Please check your availability.\n" +
-            "• IZA will review capacity before confirming assignments."
+            "⚠️ *Project already announced*\n\n" +
+            `*Project:* ${project.name}\n\n` +
+            "This project already has an open role announcement. Please use the existing announcement instead of reposting."
         }
-      },
-      {
-        type: "actions",
-        elements: [
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "🙋 Claim a Role",
-              emoji: true
-            },
-            action_id: "project_role_claim_start",
-            value: announcementKey
-          }
-        ]
       }
     ],
-    "New Project Opportunity"
+    "Project already announced"
   );
 }
 
-function openProjectRoleClaimModal_(userId, channelId, messageTs, triggerId, announcementKey) {
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(announcementKey);
+function buildRoleAnnouncementBlocks_(announcementKey, project, rolesToAnnounce) {
+  const roleLines =
+    rolesToAnnounce
+      .map(role =>
+        `*${role.role}* — ${role.hours} hrs\n` +
+        `${role.deliverables || "-"}`
+      )
+      .join("\n\n");
+
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          ":rotating_light: *New Project Opportunity* :rotating_light:\n\n" +
+          `*Project:* ${project.name}\n` +
+          `*Objective:* ${project.description || "-"}\n` +
+          `*Start date:* ${project.startDate || "-"}\n` +
+          `*End date:* ${project.endDate || "-"}\n\n` +
+          "*Available Roles:*\n\n" +
+          roleLines +
+          "\n\n" +
+          ":warning: *Before claiming:*\n" +
+          "• Please check your availability.\n" +
+          "• IZA will review capacity before confirming assignments."
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "🙋 Claim a Role",
+            emoji: true
+          },
+          action_id: "project_role_claim_start",
+          value: announcementKey
+        }
+      ]
+    }
+  ];
+}
+
+
+/************************************
+ * PUBLIC CLAIM FLOW
+ ************************************/
+
+function openProjectRoleClaimModal_(
+    userId,
+    channelId,
+    messageTs,
+    triggerId,
+    announcementKey
+  ) {
+  const raw =
+    PropertiesService
+      .getScriptProperties()
+      .getProperty(announcementKey);
 
   if (!raw) {
     sendEphemeralMessage(
@@ -550,9 +760,10 @@ function openProjectRoleClaimModal_(userId, channelId, messageTs, triggerId, ann
     return;
   }
 
-  const data = JSON.parse(raw);
+  const data =
+    JSON.parse(raw);
 
-  if (data.closed) {
+  if (data.closed || data.closedAt) {
     sendEphemeralMessage(
       channelId,
       userId,
@@ -561,11 +772,15 @@ function openProjectRoleClaimModal_(userId, channelId, messageTs, triggerId, ann
     return;
   }
 
-  const roles = (data.roles || [])
-    .map((role, index) => ({ ...role, originalIndex: index }))
-    .filter(role => !role.assignedTo);
+  const roles =
+    (data.roles || [])
+      .map((role, index) => ({
+        ...role,
+        originalIndex: index
+      }))
+      .filter(role => !role.assignedTo);
 
-  if (roles.length === 0) {
+  if (!roles.length) {
     sendEphemeralMessage(
       channelId,
       userId,
@@ -574,62 +789,75 @@ function openProjectRoleClaimModal_(userId, channelId, messageTs, triggerId, ann
     return;
   }
 
-  callSlackApi_("chat.postEphemeral", {
-    channel: channelId,
-    user: userId,
-    text: "Claim a role",
-    blocks: [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "🙋 *Claim Role(s)*\n\n" +
-            "Select the role(s) you want to claim, then click *Submit Claim*."
-        }
-      },
-      {
-        type: "actions",
-        block_id: "role_claim_checkbox_block",
-        elements: [
-          {
-            type: "checkboxes",
-            action_id: "role_claim_checkbox_select",
-            options: roles.map(role => ({
+  callSlackApi_(
+    "chat.postEphemeral",
+    {
+      channel: channelId,
+      user: userId,
+      text: "Claim a role",
+      blocks: buildRoleClaimEphemeralBlocks_(announcementKey, roles)
+    }
+  );
+}
+
+function buildRoleClaimEphemeralBlocks_(announcementKey, roles) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "🙋 *Claim Role(s)*\n\n" +
+          "Select the role(s) you want to claim, then click *Submit Claim*."
+      }
+    },
+    {
+      type: "actions",
+      block_id: "role_claim_checkbox_block",
+      elements: [
+        {
+          type: "checkboxes",
+          action_id: "role_claim_checkbox_select",
+          options:
+            roles.map(role => ({
               text: {
                 type: "mrkdwn",
                 text: `*${role.role}* — ${role.hours} hrs`
               },
               value: String(role.originalIndex)
             }))
-          }
-        ]
-      },
-      {
-        type: "actions",
-        elements: [
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "Submit Claim",
-              emoji: true
-            },
-            action_id: "project_role_claim_submit_ephemeral",
-            value: announcementKey
-          }
-        ]
-      }
-    ]
-  });
+        }
+      ]
+    },
+    {
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "Submit Claim",
+            emoji: true
+          },
+          action_id: "project_role_claim_submit_ephemeral",
+          value: announcementKey
+        }
+      ]
+    }
+  ];
 }
 
 function handleProjectRoleClaimEphemeralSubmit_(payload) {
-  const context = getSlackActionContext_(payload);
-  const announcementKey = context.actionValue;
+  const context =
+    getSlackActionContext_(payload);
 
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(announcementKey);
+  const announcementKey =
+    context.actionValue;
+
+  const raw =
+    PropertiesService
+      .getScriptProperties()
+      .getProperty(announcementKey);
 
   if (!raw) {
     deleteOriginalInteractiveMessage_(payload.response_url);
@@ -642,9 +870,10 @@ function handleProjectRoleClaimEphemeralSubmit_(payload) {
     return;
   }
 
-  const data = JSON.parse(raw);
+  const data =
+    JSON.parse(raw);
 
-  if (data.closed) {
+  if (data.closed || data.closedAt) {
     deleteOriginalInteractiveMessage_(payload.response_url);
 
     sendEphemeralMessage(
@@ -655,22 +884,10 @@ function handleProjectRoleClaimEphemeralSubmit_(payload) {
     return;
   }
 
-  const roles = data.roles || [];
-  const claims = data.claims || [];
+  const selectedOptions =
+    getSelectedRoleClaimOptions_(payload);
 
-  let selectedOptions = [];
-
-  Object.keys(payload.state.values).forEach(blockId => {
-    const block = payload.state.values[blockId];
-
-    Object.keys(block).forEach(actionId => {
-      if (actionId === "role_claim_checkbox_select") {
-        selectedOptions = block[actionId].selected_options || [];
-      }
-    });
-  });
-
-  if (selectedOptions.length === 0) {
+  if (!selectedOptions.length) {
     sendEphemeralMessage(
       context.channelId,
       context.userId,
@@ -679,24 +896,86 @@ function handleProjectRoleClaimEphemeralSubmit_(payload) {
     return;
   }
 
+  const result =
+    recordRoleClaims_(
+      data,
+      context.userId,
+      selectedOptions
+    );
+
+  PropertiesService
+    .getScriptProperties()
+    .setProperty(
+      announcementKey,
+      JSON.stringify(data)
+    );
+
+  deleteOriginalInteractiveMessage_(
+    payload.response_url
+  );
+
+  if (result.claimedRoles.length) {
+    postRoleClaimNotification_(
+      data,
+      context.userId,
+      result.claimedRoles
+    );
+  }
+
+  sendEphemeralMessage(
+    context.channelId,
+    context.userId,
+    buildRoleClaimResultMessage_(result)
+  );
+}
+
+function getSelectedRoleClaimOptions_(payload) {
+  let selectedOptions = [];
+
+  Object.keys(payload.state.values).forEach(blockId => {
+    const block =
+      payload.state.values[blockId];
+
+    Object.keys(block).forEach(actionId => {
+      if (actionId === "role_claim_checkbox_select") {
+        selectedOptions =
+          block[actionId].selected_options || [];
+      }
+    });
+  });
+
+  return selectedOptions;
+}
+
+function recordRoleClaims_(data, userId, selectedOptions) {
+  const roles =
+    data.roles || [];
+
+  const claims =
+    data.claims || [];
+
   const claimedRoles = [];
   const duplicateRoles = [];
   const unavailableRoles = [];
 
   selectedOptions.forEach(option => {
-    const selectedRole = roles[Number(option.value)];
+    const selectedRole =
+      roles[Number(option.value)];
 
-    if (!selectedRole) return;
+    if (!selectedRole) {
+      return;
+    }
 
     if (selectedRole.assignedTo) {
       unavailableRoles.push(selectedRole.role);
       return;
     }
 
-    const alreadyClaimed = claims.some(claim =>
-      claim.userId === context.userId &&
-      claim.role === selectedRole.role
-    );
+    const alreadyClaimed =
+      claims.some(claim =>
+        claim.userId === userId &&
+        claim.role === selectedRole.role
+      );
 
     if (alreadyClaimed) {
       duplicateRoles.push(selectedRole.role);
@@ -704,7 +983,7 @@ function handleProjectRoleClaimEphemeralSubmit_(payload) {
     }
 
     claims.push({
-      userId: context.userId,
+      userId,
       role: selectedRole.role,
       hours: selectedRole.hours,
       claimedAt: new Date().toISOString()
@@ -715,71 +994,57 @@ function handleProjectRoleClaimEphemeralSubmit_(payload) {
 
   data.claims = claims;
 
-  PropertiesService.getScriptProperties().setProperty(
-    announcementKey,
-    JSON.stringify(data)
-  );
-
-  deleteOriginalInteractiveMessage_(payload.response_url);
-
-  if (claimedRoles.length) {
-    postRoleClaimNotification_(
-      data,
-      context.userId,
-      claimedRoles
-    );
-  }
-
-  const messageParts = [];
-
-  if (claimedRoles.length) {
-    messageParts.push(
-      `Recorded claim(s): ${claimedRoles.map(role => `*${role}*`).join(", ")}.`
-    );
-  }
-
-  if (duplicateRoles.length) {
-    messageParts.push(
-      `Already claimed: ${duplicateRoles.map(role => `*${role}*`).join(", ")}.`
-    );
-  }
-
-  if (unavailableRoles.length) {
-    messageParts.push(
-      `Already assigned: ${unavailableRoles.map(role => `*${role}*`).join(", ")}.`
-    );
-  }
-
-  sendEphemeralMessage(
-    context.channelId,
-    context.userId,
-    messageParts.join("\n")
-  );
+  return {
+    claimedRoles,
+    duplicateRoles,
+    unavailableRoles
+  };
 }
 
+function buildRoleClaimResultMessage_(result) {
+  const messageParts = [];
+
+  if (result.claimedRoles.length) {
+    messageParts.push(
+      `Recorded claim(s): ${result.claimedRoles.map(role => `*${role}*`).join(", ")}.`
+    );
+  }
+
+  if (result.duplicateRoles.length) {
+    messageParts.push(
+      `Already claimed: ${result.duplicateRoles.map(role => `*${role}*`).join(", ")}.`
+    );
+  }
+
+  if (result.unavailableRoles.length) {
+    messageParts.push(
+      `Already assigned: ${result.unavailableRoles.map(role => `*${role}*`).join(", ")}.`
+    );
+  }
+
+  return messageParts.join("\n");
+}
+
+
+/************************************
+ * CLAIM NOTIFICATIONS
+ ************************************/
+
 function postRoleClaimNotification_(announcement, userId, claimedRoles) {
-  const projectName =
-    announcement.project?.name ||
-    "Unknown Project";
-
-  const contractor = findContractorBySlackId_(userId);
-  const claimantName =
-    contractor?.name ||
-    `<@${userId}>`;
-
   const announcementKey =
     getAnnouncementKeyFromData_(announcement);
 
-  const result = postSlackMessage_(
-    CONTRACTOR_CLAIMS_CHANNEL,
-    buildClaimNotificationBlocks_(
-      announcementKey,
-      userId,
-      claimedRoles,
-      false
-    ),
-    "Role claim received"
-  );
+  const result =
+    postSlackMessage_(
+      CONTRACTOR_CLAIMS_CHANNEL,
+      buildClaimNotificationBlocks_(
+        announcementKey,
+        userId,
+        claimedRoles,
+        false
+      ),
+      "Role claim received"
+    );
 
   saveClaimNotificationMessage_(
     announcementKey,
@@ -790,8 +1055,11 @@ function postRoleClaimNotification_(announcement, userId, claimedRoles) {
 }
 
 function buildClaimNotificationBlocks_(announcementKey, userId, claimedRoles, closed) {
-  const item = getRoleClaimAnnouncement_(announcementKey);
-  const contractor = findContractorBySlackId_(userId);
+  const item =
+    getRoleClaimAnnouncement_(announcementKey);
+
+  const contractor =
+    findContractorBySlackId_(userId);
 
   const projectName =
     item?.project?.name ||
@@ -801,11 +1069,12 @@ function buildClaimNotificationBlocks_(announcementKey, userId, claimedRoles, cl
     contractor?.name ||
     `<@${userId}>`;
 
-  const statusLines = buildClaimStatusLines_(
-    item,
-    userId,
-    claimedRoles
-  );
+  const statusLines =
+    buildClaimStatusLines_(
+      item,
+      userId,
+      claimedRoles
+    );
 
   const blocks = [
     {
@@ -847,31 +1116,39 @@ function buildClaimNotificationBlocks_(announcementKey, userId, claimedRoles, cl
 }
 
 function buildClaimStatusLines_(item, userId, claimedRoles) {
-  if (!item) return "*Status:* 🟡 Open";
+  if (!item) {
+    return "*Status:* 🟡 Open";
+  }
 
-  const sortedClaimedRoles = sortRoleNamesByRoleSort_(claimedRoles);
+  const sortedClaimedRoles =
+    sortRoleNamesByRoleSort_(claimedRoles);
 
-  const lines = sortedClaimedRoles.map(roleName => {
-    const role = item.roles.find(role => role.role === roleName);
+  const lines =
+    sortedClaimedRoles.map(roleName => {
+      const role =
+        item.roles.find(itemRole =>
+          itemRole.role === roleName
+        );
 
-    if (!role) {
-      return `• 🔴 *${roleName}:* Not available`;
-    }
+      if (!role) {
+        return `• 🔴 *${roleName}:* Not available`;
+      }
 
-    if (!role.assignedTo) {
-      return `• 🟡 *${roleName}:* Open`;
-    }
+      if (!role.assignedTo) {
+        return `• 🟡 *${roleName}:* Open`;
+      }
 
-    if (role.assignedTo.userId === userId) {
-      return `• 🟢 *${roleName}:* Assigned to this claimant`;
-    }
+      if (role.assignedTo.userId === userId) {
+        return `• 🟢 *${roleName}:* Assigned to this claimant`;
+      }
 
-    return `• 🔴 *${roleName}:* Assigned to someone else`;
-  });
+      return `• 🔴 *${roleName}:* Assigned to someone else`;
+    });
 
-  const allClosed = lines.every(line =>
-    !line.includes("🟡")
-  );
+  const allClosed =
+    lines.every(line =>
+      !line.includes("🟡")
+    );
 
   return (
     "*Status:*\n" +
@@ -880,44 +1157,35 @@ function buildClaimStatusLines_(item, userId, claimedRoles) {
   );
 }
 
-function sortRoleNamesByRoleSort_(roleNames) {
-  const roleOptions = loadNotionRoleOptions_();
-
-  const sortByRoleName = {};
-
-  roleOptions.forEach(role => {
-    sortByRoleName[role.label] = role.sortOrder || 9999;
-  });
-
-  return (roleNames || []).slice().sort((a, b) => {
-    const aSort = sortByRoleName[a] || 9999;
-    const bSort = sortByRoleName[b] || 9999;
-
-    if (aSort !== bSort) {
-      return aSort - bSort;
-    }
-
-    return String(a || "").localeCompare(String(b || ""));
-  });
-}
-
 function saveClaimNotificationMessage_(announcementKey, userId, channelId, messageTs) {
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(announcementKey);
+  const raw =
+    PropertiesService
+      .getScriptProperties()
+      .getProperty(announcementKey);
 
-  if (!raw) return;
+  if (!raw) {
+    return;
+  }
 
-  const data = JSON.parse(raw);
+  const data =
+    JSON.parse(raw);
 
-  data.claimNotifications = data.claimNotifications || [];
+  data.claimNotifications =
+    data.claimNotifications || [];
 
-  const existing = data.claimNotifications.find(item =>
-    item.userId === userId
-  );
+  const existing =
+    data.claimNotifications.find(item =>
+      item.userId === userId
+    );
 
-  const claimedRoles = (data.claims || [])
-    .filter(claim => claim.userId === userId)
-    .map(claim => claim.role);
+  const claimedRoles =
+    (data.claims || [])
+      .filter(claim =>
+        claim.userId === userId
+      )
+      .map(claim =>
+        claim.role
+      );
 
   if (existing) {
     existing.channelId = channelId;
@@ -932,50 +1200,56 @@ function saveClaimNotificationMessage_(announcementKey, userId, channelId, messa
     });
   }
 
-  PropertiesService.getScriptProperties().setProperty(
-    announcementKey,
-    JSON.stringify(data)
-  );
+  PropertiesService
+    .getScriptProperties()
+    .setProperty(
+      announcementKey,
+      JSON.stringify(data)
+    );
 }
 
-function getAnnouncementKeyFromData_(announcement) {
-  const props = PropertiesService.getScriptProperties();
-  const all = props.getProperties();
 
-  const projectId = announcement.project?.id;
-
-  const match = Object.keys(all).find(key => {
-    if (!key.startsWith("ROLE_CLAIM_")) return false;
-
-    const data = JSON.parse(all[key]);
-    return data.project?.id === projectId;
-  });
-
-  return match || "";
-}
+/************************************
+ * LEGACY MODAL CLAIM SUBMIT
+ ************************************/
 
 function handleProjectRoleClaimSubmit_(payload) {
-  const metadata = JSON.parse(payload.view.private_metadata);
-  const values = payload.view.state.values;
+  const metadata =
+    JSON.parse(payload.view.private_metadata);
 
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(metadata.announcementKey);
+  const values =
+    payload.view.state.values;
+
+  const raw =
+    PropertiesService
+      .getScriptProperties()
+      .getProperty(metadata.announcementKey);
 
   if (!raw) {
-    return { response_action: "clear" };
+    return {
+      response_action: "clear"
+    };
   }
 
-  const data = JSON.parse(raw);
+  const data =
+    JSON.parse(raw);
+
   const selectedIndex =
-    Number(values.roles_claim_block.roles_claim_value.selected_option.value);
+    Number(
+      values.roles_claim_block.roles_claim_value.selected_option.value
+    );
 
-  const selectedRole = data.roles[selectedIndex];
+  const selectedRole =
+    data.roles[selectedIndex];
 
-  data.claims = data.claims || [];
-    const alreadyClaimed = data.claims.some(claim =>
-    claim.userId === metadata.userId &&
-    claim.role === selectedRole.role
-  );
+  data.claims =
+    data.claims || [];
+
+  const alreadyClaimed =
+    data.claims.some(claim =>
+      claim.userId === metadata.userId &&
+      claim.role === selectedRole.role
+    );
 
   if (alreadyClaimed) {
     sendEphemeralMessage(
@@ -984,8 +1258,11 @@ function handleProjectRoleClaimSubmit_(payload) {
       `You already claimed *${selectedRole.role}*.`
     );
 
-    return { response_action: "clear" };
+    return {
+      response_action: "clear"
+    };
   }
+
   data.claims.push({
     userId: metadata.userId,
     role: selectedRole.role,
@@ -994,10 +1271,12 @@ function handleProjectRoleClaimSubmit_(payload) {
     claimedAt: new Date().toISOString()
   });
 
-  PropertiesService.getScriptProperties().setProperty(
-    metadata.announcementKey,
-    JSON.stringify(data)
-  );
+  PropertiesService
+    .getScriptProperties()
+    .setProperty(
+      metadata.announcementKey,
+      JSON.stringify(data)
+    );
 
   sendEphemeralMessage(
     metadata.channelId,
@@ -1005,24 +1284,142 @@ function handleProjectRoleClaimSubmit_(payload) {
     `Thanks! Your claim for *${selectedRole.role}* was recorded.`
   );
 
-  return { response_action: "clear" };
+  return {
+    response_action: "clear"
+  };
 }
 
+
+/************************************
+ * ANNOUNCEMENT HELPERS
+ ************************************/
+
+function findOpenAnnouncementForProject_(projectId) {
+  const props =
+    PropertiesService.getScriptProperties();
+
+  const all =
+    props.getProperties();
+
+  const matchKey =
+    Object.keys(all).find(key => {
+      if (!key.startsWith("ROLE_CLAIM_")) {
+        return false;
+      }
+
+      const data =
+        JSON.parse(all[key]);
+
+      return (
+        data.project?.id === projectId &&
+        !data.closed &&
+        !data.closedAt
+      );
+    });
+
+  if (!matchKey) {
+    return null;
+  }
+
+  return {
+    key: matchKey,
+    data: JSON.parse(all[matchKey])
+  };
+}
+
+function areAllAnnouncementRolesAssigned_(announcement) {
+  const roles =
+    announcement.roles || [];
+
+  return (
+    roles.length > 0 &&
+    roles.every(role => role.assignedTo)
+  );
+}
+
+function closeAnnouncementIfComplete_(announcementKey) {
+  const item =
+    getRoleClaimAnnouncement_(announcementKey);
+
+  if (!item || item.closedAt) {
+    return false;
+  }
+
+  const allAssigned =
+    (item.roles || []).every(role =>
+      role.assignedTo
+    );
+
+  if (!allAssigned) {
+    return false;
+  }
+
+  item.closedAt =
+    new Date().toISOString();
+
+  PropertiesService
+    .getScriptProperties()
+    .setProperty(
+      announcementKey,
+      JSON.stringify(item)
+    );
+
+  refreshClaimNotificationMessages_(announcementKey);
+
+  return true;
+}
+
+function getAnnouncementKeyFromData_(announcement) {
+  const props =
+    PropertiesService.getScriptProperties();
+
+  const all =
+    props.getProperties();
+
+  const projectId =
+    announcement.project?.id;
+
+  const match =
+    Object.keys(all).find(key => {
+      if (!key.startsWith("ROLE_CLAIM_")) {
+        return false;
+      }
+
+      const data =
+        JSON.parse(all[key]);
+
+      return data.project?.id === projectId;
+    });
+
+  return match || "";
+}
+
+
+/************************************
+ * CANCEL + UTILITIES
+ ************************************/
+
 function handleContractorCancel_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (session) {
     delete session.contractorAssignments;
     delete session.contractorStep;
+
     session.status = "roles_created";
-    saveProjectSession_(userId, session);
+
+    saveProjectSession_(
+      userId,
+      session
+    );
   }
 
   updateIzaMenu(
     channelId,
     messageTs,
-    buildProjectsMenuBlocks_(),
-    "Projects"
+    buildAdminProjectsMenuBlocks_(),
+    "Admin Projects"
   );
 }
 
@@ -1035,71 +1432,48 @@ function getContractorProjectName_(session) {
 }
 
 function deleteOriginalInteractiveMessage_(responseUrl) {
-  if (!responseUrl) return;
+  if (!responseUrl) {
+    return;
+  }
 
-  UrlFetchApp.fetch(responseUrl, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      delete_original: true
-    }),
-    muteHttpExceptions: true
-  });
-}
-
-function findOpenAnnouncementForProject_(projectId) {
-  const props = PropertiesService.getScriptProperties();
-  const all = props.getProperties();
-
-  const matchKey = Object.keys(all).find(key => {
-    if (!key.startsWith("ROLE_CLAIM_")) return false;
-
-    const data = JSON.parse(all[key]);
-
-    return (
-      data.project?.id === projectId &&
-      !data.closed
-    );
-  });
-
-  if (!matchKey) return null;
-
-  return {
-    key: matchKey,
-    data: JSON.parse(all[matchKey])
-  };
-}
-
-function areAllAnnouncementRolesAssigned_(announcement) {
-  const roles = announcement.roles || [];
-
-  return (
-    roles.length > 0 &&
-    roles.every(role => role.assignedTo)
+  UrlFetchApp.fetch(
+    responseUrl,
+    {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify({
+        delete_original: true
+      }),
+      muteHttpExceptions: true
+    }
   );
 }
 
-function closeAnnouncementIfComplete_(announcementKey) {
-  const item = getRoleClaimAnnouncement_(announcementKey);
+function sortRoleNamesByRoleSort_(roleNames) {
+  const roleOptions =
+    loadNotionRoleOptions_();
 
-  if (!item || item.closedAt) {
-    return false;
-  }
+  const sortByRoleName = {};
 
-  const allAssigned = (item.roles || []).every(role => role.assignedTo);
+  roleOptions.forEach(role => {
+    sortByRoleName[role.label] =
+      role.sortOrder || 9999;
+  });
 
-  if (!allAssigned) {
-    return false;
-  }
+  return (roleNames || [])
+    .slice()
+    .sort((a, b) => {
+      const aSort =
+        sortByRoleName[a] || 9999;
 
-  item.closedAt = new Date().toISOString();
+      const bSort =
+        sortByRoleName[b] || 9999;
 
-  PropertiesService.getScriptProperties().setProperty(
-    announcementKey,
-    JSON.stringify(item)
-  );
+      if (aSort !== bSort) {
+        return aSort - bSort;
+      }
 
-  refreshClaimNotificationMessages_(announcementKey);
-
-  return true;
+      return String(a || "")
+        .localeCompare(String(b || ""));
+    });
 }

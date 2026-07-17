@@ -9,6 +9,11 @@
  *
  ******************************************************/
 
+
+/************************************
+ * STATUS OPTIONS
+ ************************************/
+
 const PROJECT_STATUS_UPDATE_OPTIONS = [
   "Quotation",
   "Not Started",
@@ -19,8 +24,14 @@ const PROJECT_STATUS_UPDATE_OPTIONS = [
   "Done"
 ];
 
+
+/************************************
+ * START FLOW
+ ************************************/
+
 function startProjectStatusUpdate_(channelId, messageTs, userId) {
-  const projects = loadProjectStatusUpdateOptions_();
+  const projects =
+    loadProjectStatusUpdateOptions_();
 
   updateIzaMenu(
     channelId,
@@ -30,8 +41,14 @@ function startProjectStatusUpdate_(channelId, messageTs, userId) {
   );
 }
 
+
+/************************************
+ * LOAD PROJECT OPTIONS
+ ************************************/
+
 function loadProjectStatusUpdateOptions_() {
-  const rows = queryAllDataSourceRows_(PROJECTS_OVERVIEW_DATA_SOURCE_ID);
+  const rows =
+    queryAllDataSourceRows_(PROJECTS_OVERVIEW_DATA_SOURCE_ID);
 
   return rows
     .map(row => {
@@ -51,8 +68,11 @@ function loadProjectStatusUpdateOptions_() {
     })
     .filter(project => project.name)
     .sort((a, b) => {
-      const statusA = getProjectStatusSortOrder_(a.status);
-      const statusB = getProjectStatusSortOrder_(b.status);
+      const statusA =
+        getProjectStatusSortOrder_(a.status);
+
+      const statusB =
+        getProjectStatusSortOrder_(b.status);
 
       if (statusA !== statusB) {
         return statusA - statusB;
@@ -63,10 +83,18 @@ function loadProjectStatusUpdateOptions_() {
 }
 
 function getProjectStatusSortOrder_(status) {
-  const index = PROJECT_STATUS_UPDATE_OPTIONS.indexOf(status);
+  const index =
+    PROJECT_STATUS_UPDATE_OPTIONS.indexOf(status);
 
-  return index === -1 ? 999 : index;
+  return index === -1
+    ? 999
+    : index;
 }
+
+
+/************************************
+ * SELECT PROJECT
+ ************************************/
 
 function buildProjectStatusProjectSelectBlocks_(projects) {
   if (!projects.length) {
@@ -83,20 +111,23 @@ function buildProjectStatusProjectSelectBlocks_(projects) {
       {
         type: "actions",
         elements: [
-          button_("⬅️ Back", "ops_projects_overview")
+          button_("⬅️ Back", "admin_projects_menu")
         ]
       }
     ];
   }
 
-  const options = projects.slice(0, 100).map(project => ({
-    text: {
-      type: "plain_text",
-      text: `${project.status} - ${project.name}`.substring(0, 75),
-      emoji: true
-    },
-    value: project.id
-  }));
+  const options =
+    projects
+      .slice(0, 100)
+      .map(project => ({
+        text: {
+          type: "plain_text",
+          text: `${project.status} - ${project.name}`.substring(0, 75),
+          emoji: true
+        },
+        value: project.id
+      }));
 
   return [
     {
@@ -126,7 +157,7 @@ function buildProjectStatusProjectSelectBlocks_(projects) {
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "ops_projects_overview")
+        button_("⬅️ Back", "admin_projects_menu")
       ]
     }
   ];
@@ -136,31 +167,37 @@ function handleProjectStatusProjectSelect_(payload, channelId, messageTs, userId
   const projectId =
     payload.actions[0].selected_option.value;
 
-  const projects = loadProjectStatusUpdateOptions_();
-  const selected = projects.find(project => project.id === projectId);
+  const projects =
+    loadProjectStatusUpdateOptions_();
+
+  const selected =
+    projects.find(project => project.id === projectId);
 
   if (!selected) {
     startProjectStatusUpdate_(channelId, messageTs, userId);
     return;
   }
 
-  saveProjectStatusSession_(userId, {
+  const session = {
     projectId: selected.id,
     projectName: selected.name,
     currentStatus: selected.status
-  });
+  };
+
+  saveProjectStatusSession_(userId, session);
 
   updateIzaMenu(
     channelId,
     messageTs,
-    buildProjectStatusValueSelectBlocks_({
-      projectId: selected.id,
-      projectName: selected.name,
-      currentStatus: selected.status
-    }),
+    buildProjectStatusValueSelectBlocks_(session),
     "Select New Project Status"
   );
 }
+
+
+/************************************
+ * SELECT NEW STATUS
+ ************************************/
 
 function buildProjectStatusValueSelectBlocks_(session) {
   return [
@@ -207,7 +244,8 @@ function buildProjectStatusValueSelectBlocks_(session) {
 }
 
 function handleProjectStatusValueSelect_(payload, channelId, messageTs, userId) {
-  const session = getProjectStatusSession_(userId);
+  const session =
+    getProjectStatusSession_(userId);
 
   if (!session) {
     startProjectStatusUpdate_(channelId, messageTs, userId);
@@ -226,6 +264,11 @@ function handleProjectStatusValueSelect_(payload, channelId, messageTs, userId) 
     "Review Project Status"
   );
 }
+
+
+/************************************
+ * REVIEW + CONFIRM
+ ************************************/
 
 function buildProjectStatusReviewBlocks_(session) {
   return [
@@ -248,15 +291,16 @@ function buildProjectStatusReviewBlocks_(session) {
       type: "actions",
       elements: [
         button_("⬅️ Back", "project_status_update_start"),
-        button_("✅ Confirm Update", "project_status_confirm"),
-        button_("❌ Cancel", "project_status_cancel")
+        primaryButton_("✅ Confirm Update", "project_status_confirm"),
+        dangerButton_("❌ Cancel", "project_status_cancel")
       ]
     }
   ];
 }
 
 function handleProjectStatusConfirm_(channelId, messageTs, userId) {
-  const session = getProjectStatusSession_(userId);
+  const session =
+    getProjectStatusSession_(userId);
 
   if (!session || !session.projectId || !session.newStatus) {
     startProjectStatusUpdate_(channelId, messageTs, userId);
@@ -297,8 +341,8 @@ function buildProjectStatusCompletedBlocks_(session) {
     {
       type: "actions",
       elements: [
-        button_("📋 Back to Overview", "ops_projects_overview"),
-        button_("🏠 Main Menu", "menu_main")
+        button_("📋 Back to Overview", "projects_overview"),
+        button_("⬅️ Back", "admin_projects_menu")
       ]
     }
   ];
@@ -310,10 +354,15 @@ function handleProjectStatusCancel_(channelId, messageTs, userId) {
   updateIzaMenu(
     channelId,
     messageTs,
-    buildProjectsMenuBlocks_(),
-    "Projects"
+    buildAdminProjectsMenuBlocks_(),
+    "Admin Projects"
   );
 }
+
+
+/************************************
+ * NOTION UPDATE
+ ************************************/
 
 function updateNotionProjectStatus_(projectId, status) {
   return notionFetch_(
@@ -331,8 +380,14 @@ function updateNotionProjectStatus_(projectId, status) {
   );
 }
 
+
+/************************************
+ * SESSION STORAGE
+ ************************************/
+
 function saveProjectStatusSession_(userId, session) {
-  PropertiesService.getScriptProperties()
+  PropertiesService
+    .getScriptProperties()
     .setProperty(
       `PROJECT_STATUS_SESSION_${userId}`,
       JSON.stringify(session)
@@ -340,13 +395,18 @@ function saveProjectStatusSession_(userId, session) {
 }
 
 function getProjectStatusSession_(userId) {
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(`PROJECT_STATUS_SESSION_${userId}`);
+  const raw =
+    PropertiesService
+      .getScriptProperties()
+      .getProperty(`PROJECT_STATUS_SESSION_${userId}`);
 
-  return raw ? JSON.parse(raw) : null;
+  return raw
+    ? JSON.parse(raw)
+    : null;
 }
 
 function clearProjectStatusSession_(userId) {
-  PropertiesService.getScriptProperties()
+  PropertiesService
+    .getScriptProperties()
     .deleteProperty(`PROJECT_STATUS_SESSION_${userId}`);
 }

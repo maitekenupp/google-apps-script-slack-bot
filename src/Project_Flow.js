@@ -1,3 +1,18 @@
+/******************************************************
+ *
+ * IZA
+ * File: Project_Flow.gs
+ *
+ * Purpose:
+ * Slack-guided flow for creating a new Notion project.
+ *
+ ******************************************************/
+
+
+/************************************
+ * START PROJECT FLOW
+ ************************************/
+
 function startProjectFlow_(userId, channelId, messageTs) {
   const session = {
     status: "project_collecting",
@@ -19,14 +34,24 @@ function startProjectFlow_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * STEP 1: CLIENT
+ ************************************/
+
 function buildProjectClientBlocks_(answers) {
   answers = answers || {};
 
-  const clientOptions = loadNotionClientOptions_();
-  const selectedClientId = answers["Client"]?.id || "";
-  const selectedClient = clientOptions.find(
-    client => client.value === selectedClientId
-  );
+  const clientOptions =
+    loadNotionClientOptions_();
+
+  const selectedClientId =
+    answers["Client"]?.id || "";
+
+  const selectedClient =
+    clientOptions.find(client =>
+      client.value === selectedClientId
+    );
 
   const clientSelect = {
     type: "static_select",
@@ -36,14 +61,15 @@ function buildProjectClientBlocks_(answers) {
       text: "Select a client",
       emoji: true
     },
-    options: clientOptions.map(client => ({
-      text: {
-        type: "plain_text",
-        text: client.label,
-        emoji: true
-      },
-      value: client.value
-    }))
+    options:
+      clientOptions.map(client => ({
+        text: {
+          type: "plain_text",
+          text: client.label,
+          emoji: true
+        },
+        value: client.value
+      }))
   };
 
   if (selectedClientId && selectedClient) {
@@ -60,10 +86,14 @@ function buildProjectClientBlocks_(answers) {
   const navigationButtons = [];
 
   if (answers["Client"]?.id) {
-    navigationButtons.push(button_("Next", "project_client_next"));
+    navigationButtons.push(
+      button_("Next", "project_client_next")
+    );
   }
 
-  navigationButtons.push(button_("❌ Cancel", "project_create_cancel"));
+  navigationButtons.push(
+    dangerButton_("❌ Cancel", "project_create_cancel")
+  );
 
   return [
     {
@@ -78,7 +108,9 @@ function buildProjectClientBlocks_(answers) {
     },
     {
       type: "actions",
-      elements: [clientSelect]
+      elements: [
+        clientSelect
+      ]
     },
     {
       type: "actions",
@@ -88,16 +120,20 @@ function buildProjectClientBlocks_(answers) {
 }
 
 function handleProjectClientSelect_(payload) {
-  const context = getSlackActionContext_(payload);
-  const selected = payload.actions[0].selected_option;
+  const context =
+    getSlackActionContext_(payload);
 
-  const session = getProjectSession_(context.userId) || {
-    status: "project_collecting",
-    answers: {},
-    userId: context.userId,
-    channelId: context.channelId,
-    messageTs: context.messageTs
-  };
+  const selected =
+    payload.actions[0].selected_option;
+
+  const session =
+    getProjectSession_(context.userId) || {
+      status: "project_collecting",
+      answers: {},
+      userId: context.userId,
+      channelId: context.channelId,
+      messageTs: context.messageTs
+    };
 
   session.step = "client";
   session.answers = session.answers || {};
@@ -107,7 +143,10 @@ function handleProjectClientSelect_(payload) {
   };
   session.lastActivity = Date.now();
 
-  saveProjectSession_(context.userId, session);
+  saveProjectSession_(
+    context.userId,
+    session
+  );
 
   updateIzaMenu(
     context.channelId,
@@ -118,7 +157,8 @@ function handleProjectClientSelect_(payload) {
 }
 
 function handleProjectClientNext_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.answers?.["Client"]?.id) {
     updateIzaMenu(
@@ -133,7 +173,10 @@ function handleProjectClientNext_(userId, channelId, messageTs) {
   session.step = "details";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -143,8 +186,27 @@ function handleProjectClientNext_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * STEP 2: PROJECT DETAILS
+ ************************************/
+
 function buildProjectDetailsPromptBlocks_(answers) {
   answers = answers || {};
+
+  const navigationButtons = [
+    button_("Previous", "project_details_previous")
+  ];
+
+  if (answers["Project Name"]) {
+    navigationButtons.push(
+      button_("Next", "project_details_next")
+    );
+  }
+
+  navigationButtons.push(
+    dangerButton_("❌ Cancel", "project_create_cancel")
+  );
 
   return [
     {
@@ -168,24 +230,24 @@ function buildProjectDetailsPromptBlocks_(answers) {
     },
     {
       type: "actions",
-      elements: [
-        button_("Previous", "project_details_previous"),
-        button_("Next", "project_details_next"),
-        button_("❌ Cancel", "project_create_cancel")
-      ]
+      elements: navigationButtons
     }
   ];
 }
 
 function openProjectDetailsModal_(userId, channelId, messageTs, triggerId) {
-  const session = getProjectSession_(userId) || {};
-  const answers = session.answers || {};
+  const session =
+    getProjectSession_(userId) || {};
 
-  const metadata = JSON.stringify({
-    userId,
-    channelId,
-    messageTs
-  });
+  const answers =
+    session.answers || {};
+
+  const metadata =
+    JSON.stringify({
+      userId,
+      channelId,
+      messageTs
+    });
 
   openSlackModal_(
     triggerId,
@@ -254,13 +316,19 @@ function buildProjectDetailsModalView_(privateMetadata, answers) {
 }
 
 function handleProjectDetailsSubmit_(payload) {
-  const metadata = JSON.parse(payload.view.private_metadata);
-  const values = payload.view.state.values;
+  const metadata =
+    JSON.parse(payload.view.private_metadata);
 
-  const session = getProjectSession_(metadata.userId);
+  const values =
+    payload.view.state.values;
+
+  const session =
+    getProjectSession_(metadata.userId);
 
   if (!session) {
-    return { response_action: "clear" };
+    return {
+      response_action: "clear"
+    };
   }
 
   session.step = "details";
@@ -271,7 +339,10 @@ function handleProjectDetailsSubmit_(payload) {
     values.description_block.description_value.value || "";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(metadata.userId, session);
+  saveProjectSession_(
+    metadata.userId,
+    session
+  );
 
   updateIzaMenu(
     metadata.channelId,
@@ -280,11 +351,14 @@ function handleProjectDetailsSubmit_(payload) {
     "Project Details"
   );
 
-  return { response_action: "clear" };
+  return {
+    response_action: "clear"
+  };
 }
 
 function handleProjectDetailsPrevious_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   updateIzaMenu(
     channelId,
@@ -295,7 +369,8 @@ function handleProjectDetailsPrevious_(userId, channelId, messageTs) {
 }
 
 function handleProjectDetailsNext_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.answers?.["Project Name"]) {
     updateIzaMenu(
@@ -310,7 +385,10 @@ function handleProjectDetailsNext_(userId, channelId, messageTs) {
   session.step = "dates";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -320,10 +398,16 @@ function handleProjectDetailsNext_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * STEP 3: DATES
+ ************************************/
+
 function buildProjectDatesBlocks_(answers) {
   answers = answers || {};
 
-  const dates = answers["Project Dates"] || {};
+  const dates =
+    answers["Project Dates"] || {};
 
   const startDatePicker = {
     type: "datepicker",
@@ -358,10 +442,14 @@ function buildProjectDatesBlocks_(answers) {
   ];
 
   if (dates.startDate && dates.endDate) {
-    navigationButtons.push(button_("Next", "project_dates_next"));
+    navigationButtons.push(
+      button_("Next", "project_dates_next")
+    );
   }
 
-  navigationButtons.push(button_("❌ Cancel", "project_create_cancel"));
+  navigationButtons.push(
+    dangerButton_("❌ Cancel", "project_create_cancel")
+  );
 
   return [
     {
@@ -393,28 +481,41 @@ function buildProjectDatesBlocks_(answers) {
 }
 
 function handleProjectDateSelect_(payload) {
-  const context = getSlackActionContext_(payload);
-  const action = payload.actions[0];
+  const context =
+    getSlackActionContext_(payload);
 
-  const session = getProjectSession_(context.userId);
+  const action =
+    payload.actions[0];
 
-  if (!session) return;
+  const session =
+    getProjectSession_(context.userId);
+
+  if (!session) {
+    return;
+  }
 
   session.step = "dates";
   session.answers = session.answers || {};
-  session.answers["Project Dates"] = session.answers["Project Dates"] || {};
+  session.answers["Project Dates"] =
+    session.answers["Project Dates"] || {};
 
   if (action.action_id === "project_start_date_select") {
-    session.answers["Project Dates"].startDate = action.selected_date;
+    session.answers["Project Dates"].startDate =
+      action.selected_date;
   }
 
   if (action.action_id === "project_end_date_select") {
-    session.answers["Project Dates"].endDate = action.selected_date;
+    session.answers["Project Dates"].endDate =
+      action.selected_date;
   }
 
-  session.lastActivity = Date.now();
+  session.lastActivity =
+    Date.now();
 
-  saveProjectSession_(context.userId, session);
+  saveProjectSession_(
+    context.userId,
+    session
+  );
 
   updateIzaMenu(
     context.channelId,
@@ -425,7 +526,8 @@ function handleProjectDateSelect_(payload) {
 }
 
 function handleProjectDatesPrevious_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   updateIzaMenu(
     channelId,
@@ -436,8 +538,11 @@ function handleProjectDatesPrevious_(userId, channelId, messageTs) {
 }
 
 function handleProjectDatesNext_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
-  const dates = session?.answers?.["Project Dates"] || {};
+  const session =
+    getProjectSession_(userId);
+
+  const dates =
+    session?.answers?.["Project Dates"] || {};
 
   if (!dates.startDate || !dates.endDate) {
     updateIzaMenu(
@@ -452,7 +557,10 @@ function handleProjectDatesNext_(userId, channelId, messageTs) {
   session.step = "status";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -462,20 +570,30 @@ function handleProjectDatesNext_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * STEP 4: STATUS
+ ************************************/
+
 function buildProjectStatusBlocks_(answers) {
   answers = answers || {};
 
-  const dates = answers["Project Dates"] || {};
+  const dates =
+    answers["Project Dates"] || {};
 
   const navigationButtons = [
     button_("Previous", "project_status_previous")
   ];
 
   if (answers["Project Status"]) {
-    navigationButtons.push(button_("Next", "project_status_next"));
+    navigationButtons.push(
+      button_("Next", "project_status_next")
+    );
   }
 
-  navigationButtons.push(button_("❌ Cancel", "project_create_cancel"));
+  navigationButtons.push(
+    dangerButton_("❌ Cancel", "project_create_cancel")
+  );
 
   return [
     {
@@ -498,7 +616,7 @@ function buildProjectStatusBlocks_(answers) {
       elements: [
         button_("Quotation", "project_status_quotation"),
         button_("Not Started", "project_status_not_started"),
-        button_("In Progress", "project_status_in_progress")
+        button_("In progress", "project_status_in_progress")
       ]
     },
     {
@@ -509,14 +627,15 @@ function buildProjectStatusBlocks_(answers) {
 }
 
 function handleProjectStatusSelect_(userId, channelId, messageTs, actionId) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.answers) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildProjectsMenuBlocks_(),
-      "IZA Projects Menu"
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
     );
     return;
   }
@@ -524,14 +643,18 @@ function handleProjectStatusSelect_(userId, channelId, messageTs, actionId) {
   const statusMap = {
     project_status_quotation: "Quotation",
     project_status_not_started: "Not Started",
-    project_status_in_progress: "In Progress"
+    project_status_in_progress: "In progress"
   };
 
   session.step = "status";
-  session.answers["Project Status"] = statusMap[actionId] || "Quotation";
+  session.answers["Project Status"] =
+    statusMap[actionId] || "Quotation";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -542,7 +665,8 @@ function handleProjectStatusSelect_(userId, channelId, messageTs, actionId) {
 }
 
 function handleProjectStatusPrevious_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   updateIzaMenu(
     channelId,
@@ -553,7 +677,8 @@ function handleProjectStatusPrevious_(userId, channelId, messageTs) {
 }
 
 function handleProjectStatusNext_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session?.answers?.["Project Status"]) {
     updateIzaMenu(
@@ -568,7 +693,10 @@ function handleProjectStatusNext_(userId, channelId, messageTs) {
   session.step = "links";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -578,21 +706,33 @@ function handleProjectStatusNext_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * STEP 5: LINKS
+ ************************************/
+
 function buildProjectLinksPromptBlocks_(answers) {
   answers = answers || {};
 
-  const dates = answers["Project Dates"] || {};
-  const files = answers["SOW Files"] || {};
+  const dates =
+    answers["Project Dates"] || {};
+
+  const files =
+    answers["SOW Files"] || {};
 
   const navigationButtons = [
     button_("Previous", "project_links_previous")
   ];
 
   if (files.projectWorkbook) {
-    navigationButtons.push(button_("Next", "project_links_next"));
+    navigationButtons.push(
+      button_("Next", "project_links_next")
+    );
   }
 
-  navigationButtons.push(button_("❌ Cancel", "project_create_cancel"));
+  navigationButtons.push(
+    dangerButton_("❌ Cancel", "project_create_cancel")
+  );
 
   return [
     {
@@ -628,14 +768,18 @@ function buildProjectLinksPromptBlocks_(answers) {
 }
 
 function openProjectLinksModal_(userId, channelId, messageTs, triggerId) {
-  const session = getProjectSession_(userId) || {};
-  const answers = session.answers || {};
+  const session =
+    getProjectSession_(userId) || {};
 
-  const metadata = JSON.stringify({
-    userId,
-    channelId,
-    messageTs
-  });
+  const answers =
+    session.answers || {};
+
+  const metadata =
+    JSON.stringify({
+      userId,
+      channelId,
+      messageTs
+    });
 
   openSlackModal_(
     triggerId,
@@ -646,7 +790,8 @@ function openProjectLinksModal_(userId, channelId, messageTs, triggerId) {
 function buildProjectLinksModalView_(privateMetadata, answers) {
   answers = answers || {};
 
-  const files = answers["SOW Files"] || {};
+  const files =
+    answers["SOW Files"] || {};
 
   return {
     type: "modal",
@@ -715,13 +860,19 @@ function buildProjectLinksModalView_(privateMetadata, answers) {
 }
 
 function handleProjectLinksSubmit_(payload) {
-  const metadata = JSON.parse(payload.view.private_metadata);
-  const values = payload.view.state.values;
+  const metadata =
+    JSON.parse(payload.view.private_metadata);
 
-  const session = getProjectSession_(metadata.userId);
+  const values =
+    payload.view.state.values;
+
+  const session =
+    getProjectSession_(metadata.userId);
 
   if (!session) {
-    return { response_action: "clear" };
+    return {
+      response_action: "clear"
+    };
   }
 
   session.step = "links";
@@ -734,7 +885,10 @@ function handleProjectLinksSubmit_(payload) {
   };
   session.lastActivity = Date.now();
 
-  saveProjectSession_(metadata.userId, session);
+  saveProjectSession_(
+    metadata.userId,
+    session
+  );
 
   updateIzaMenu(
     metadata.channelId,
@@ -743,11 +897,14 @@ function handleProjectLinksSubmit_(payload) {
     "Project Links"
   );
 
-  return { response_action: "clear" };
+  return {
+    response_action: "clear"
+  };
 }
 
 function handleProjectLinksPrevious_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   updateIzaMenu(
     channelId,
@@ -758,8 +915,11 @@ function handleProjectLinksPrevious_(userId, channelId, messageTs) {
 }
 
 function handleProjectLinksNext_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
-  const files = session?.answers?.["SOW Files"] || {};
+  const session =
+    getProjectSession_(userId);
+
+  const files =
+    session?.answers?.["SOW Files"] || {};
 
   if (!files.projectWorkbook) {
     updateIzaMenu(
@@ -775,7 +935,10 @@ function handleProjectLinksNext_(userId, channelId, messageTs) {
   session.status = "reviewing_project";
   session.lastActivity = Date.now();
 
-  saveProjectSession_(userId, session);
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
@@ -785,10 +948,20 @@ function handleProjectLinksNext_(userId, channelId, messageTs) {
   );
 }
 
+
+/************************************
+ * REVIEW + CREATE
+ ************************************/
+
 function buildProjectReviewBlocks_(answers) {
-  const clientName = answers["Client"]?.name || "-";
-  const dates = answers["Project Dates"] || {};
-  const files = answers["SOW Files"] || {};
+  const clientName =
+    answers["Client"]?.name || "-";
+
+  const dates =
+    answers["Project Dates"] || {};
+
+  const files =
+    answers["SOW Files"] || {};
 
   const fileLines = [
     files.projectWorkbook
@@ -821,15 +994,16 @@ function buildProjectReviewBlocks_(answers) {
       type: "actions",
       elements: [
         button_("Previous", "project_review_previous"),
-        button_("✅ Create Project", "project_create_confirm"),
-        button_("❌ Cancel", "project_create_cancel")
+        primaryButton_("✅ Create Project", "project_create_confirm"),
+        dangerButton_("❌ Cancel", "project_create_cancel")
       ]
     }
   ];
 }
 
 function handleProjectReviewPrevious_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   updateIzaMenu(
     channelId,
@@ -840,14 +1014,15 @@ function handleProjectReviewPrevious_(userId, channelId, messageTs) {
 }
 
 function handleProjectCreateConfirm_(userId, channelId, messageTs) {
-  const session = getProjectSession_(userId);
+  const session =
+    getProjectSession_(userId);
 
   if (!session || !session.answers) {
     updateIzaMenu(
       channelId,
       messageTs,
-      buildProjectsMenuBlocks_(),
-      "IZA Projects Menu"
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
     );
     return;
   }
@@ -859,37 +1034,34 @@ function handleProjectCreateConfirm_(userId, channelId, messageTs) {
     return;
   }
 
-  const projectName = session.answers["Project Name"] || "New Project";
+  const projectName =
+    session.answers["Project Name"] || "New Project";
 
   session.status = "creating_project";
   session.lastActivity = Date.now();
-  saveProjectSession_(userId, session);
+
+  saveProjectSession_(
+    userId,
+    session
+  );
 
   updateIzaMenu(
     channelId,
     messageTs,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "⏳ *Creating project in Notion...*\n\n" +
-            `*${projectName}*\n\n` +
-            "Please wait a moment."
-        }
-      }
-    ],
+    buildProjectCreatingBlocks_(projectName),
     "Creating Project"
   );
 
   try {
-    const project = createNotionProject_(session.answers);
+    const project =
+      createNotionProject_(session.answers);
 
     try {
       applyDefaultProjectTemplate_(project.id);
     } catch (templateErr) {
-      Logger.log("Template apply failed: " + templateErr.message);
+      Logger.log(
+        "Template apply failed: " + templateErr.message
+      );
     }
 
     session.status = "project_created";
@@ -899,7 +1071,10 @@ function handleProjectCreateConfirm_(userId, channelId, messageTs) {
     };
     session.lastActivity = Date.now();
 
-    saveProjectSession_(userId, session);
+    saveProjectSession_(
+      userId,
+      session
+    );
 
     CacheService
       .getScriptCache()
@@ -908,26 +1083,7 @@ function handleProjectCreateConfirm_(userId, channelId, messageTs) {
     updateIzaMenu(
       channelId,
       messageTs,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "🎉 *Project created successfully!*\n\n" +
-              `*${projectName}*\n\n` +
-              `<${project.url}|📂 Open in Notion>`
-          }
-        },
-        {
-          type: "actions",
-          elements: [
-            button_("👥 Add Roles", "role_create_start"),
-            button_("📋 Projects", "menu_projects"),
-            button_("👋 Bye IZA", "menu_close")
-          ]
-        }
-      ],
+      buildProjectCreatedBlocks_(projectName, project),
       "Project Created"
     );
 
@@ -936,31 +1092,76 @@ function handleProjectCreateConfirm_(userId, channelId, messageTs) {
     session.lastError = err.message;
     session.lastActivity = Date.now();
 
-    saveProjectSession_(userId, session);
+    saveProjectSession_(
+      userId,
+      session
+    );
 
     updateIzaMenu(
       channelId,
       messageTs,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text:
-              "❌ *I had trouble creating this project in Notion.*\n\n" +
-              `*${projectName}*\n\n` +
-              `Error: ${err.message}`
-          }
-        },
-        {
-          type: "actions",
-          elements: [
-            button_("⬅️ Projects", "menu_projects"),
-            button_("🏠 Main Menu", "menu_main")
-          ]
-        }
-      ],
+      buildProjectCreateFailedBlocks_(projectName, err),
       "Project Creation Failed"
     );
   }
+}
+
+function buildProjectCreatingBlocks_(projectName) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "⏳ *Creating project in Notion...*\n\n" +
+          `*${projectName}*\n\n` +
+          "Please wait a moment."
+      }
+    }
+  ];
+}
+
+function buildProjectCreatedBlocks_(projectName, project) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "🎉 *Project created successfully!*\n\n" +
+          `*${projectName}*\n\n` +
+          `<${project.url}|📂 Open in Notion>`
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("👥 Add Roles", "role_create_start"),
+        button_("📁 Projects", "admin_projects_menu"),
+        button_("👋 Bye IZA", "menu_close")
+      ]
+    }
+  ];
+}
+
+function buildProjectCreateFailedBlocks_(projectName, err) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "❌ *I had trouble creating this project in Notion.*\n\n" +
+          `*${projectName}*\n\n` +
+          `Error: ${err.message}`
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Projects", "admin_projects_menu"),
+        button_("🏠 Main Menu", "menu_main")
+      ]
+    }
+  ];
 }

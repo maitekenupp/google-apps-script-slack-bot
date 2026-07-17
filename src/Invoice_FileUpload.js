@@ -9,6 +9,11 @@
  *
  ******************************************************/
 
+
+/************************************
+ * PENDING UPLOAD SESSION
+ ************************************/
+
 function savePendingInvoiceUpload_(userId, data) {
   PropertiesService.getScriptProperties()
     .setProperty(
@@ -28,6 +33,11 @@ function clearPendingInvoiceUpload_(userId) {
   PropertiesService.getScriptProperties()
     .deleteProperty(`PENDING_INVOICE_UPLOAD_${userId}`);
 }
+
+
+/************************************
+ * WAITING SCREEN
+ ************************************/
 
 function buildInvoiceUploadWaitingBlocks_(invoiceName) {
   return [
@@ -61,86 +71,63 @@ function handleInvoiceUploadCancel_(channelId, messageTs, userId) {
   updateIzaMenu(
     channelId,
     messageTs,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "✅ *Invoice submitted*\n\n" +
-            "No additional invoice file will be uploaded.\n\n" +
-            "Everything is set."
-        }
-      },
-      {
-        type: "actions",
-        elements: [
-          button_("👋 Bye IZA", "menu_close")
-        ]
-      }
-    ],
+    buildInvoiceUploadCanceledBlocks_(),
     "Invoice Submitted"
   );
 }
+
+function buildInvoiceUploadCanceledBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "✅ *Invoice submitted*\n\n" +
+          "No additional invoice file will be uploaded.\n\n" +
+          "Everything is set."
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("👋 Bye IZA", "menu_close")
+      ]
+    }
+  ];
+}
+
+
+/************************************
+ * SLACK FILE HANDLER
+ ************************************/
 
 function handlePendingInvoiceUploadFromSlackFile_(fileId) {
   const props = PropertiesService.getScriptProperties();
   const token = props.getProperty("SLACK_BOT_TOKEN");
 
-  const fileInfoResponse = UrlFetchApp.fetch(
-    `https://slack.com/api/files.info?file=${fileId}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      muteHttpExceptions: true
-    }
-  );
+  const fileInfo = getInvoiceUploadSlackFileInfo_(fileId, token);
 
-  const fileInfo = JSON.parse(fileInfoResponse.getContentText());
-
-  if (!fileInfo.ok) {
+  if (!fileInfo || !fileInfo.ok) {
     return false;
   }
 
   const file = fileInfo.file;
   const userId = file.user;
-
   const pending = getPendingInvoiceUpload_(userId);
 
   if (!pending) {
     return false;
   }
 
-  const downloadUrl =
-    file.url_private_download ||
-    file.url_private;
-
-  if (!downloadUrl) {
-    throw new Error("No invoice upload download URL found.");
-  }
-
-  const fileResponse = UrlFetchApp.fetch(downloadUrl, {
-    headers: {
-      Authorization: `Bearer ${token}`
-    },
-    muteHttpExceptions: true
-  });
-
-  if (fileResponse.getResponseCode() !== 200) {
-    throw new Error(
-      `Invoice upload download failed (${fileResponse.getResponseCode()})`
-    );
-  }
+  const blob = downloadInvoiceUploadSlackFile_(file, token);
 
   const originalName = file.name || "Uploaded Invoice";
   const savedFileName = invoiceSafeUploadedFileName_(
     `${pending.invoiceName} - Contractor Upload - ${originalName}`
   );
 
-  const blob = fileResponse
-    .getBlob()
-    .setName(savedFileName);
+  blob.setName(savedFileName);
 
   const folder =
     DriveApp.getFolderById(CONTRACTOR_INVOICE_FOLDER_ID);
@@ -166,6 +153,50 @@ function handlePendingInvoiceUploadFromSlackFile_(fileId) {
 
   return true;
 }
+
+function getInvoiceUploadSlackFileInfo_(fileId, token) {
+  const response = UrlFetchApp.fetch(
+    `https://slack.com/api/files.info?file=${fileId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      muteHttpExceptions: true
+    }
+  );
+
+  return JSON.parse(response.getContentText());
+}
+
+function downloadInvoiceUploadSlackFile_(file, token) {
+  const downloadUrl =
+    file.url_private_download ||
+    file.url_private;
+
+  if (!downloadUrl) {
+    throw new Error("No invoice upload download URL found.");
+  }
+
+  const response = UrlFetchApp.fetch(downloadUrl, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    muteHttpExceptions: true
+  });
+
+  if (response.getResponseCode() !== 200) {
+    throw new Error(
+      `Invoice upload download failed (${response.getResponseCode()})`
+    );
+  }
+
+  return response.getBlob();
+}
+
+
+/************************************
+ * NOTION UPDATE
+ ************************************/
 
 function updateInvoiceFilesWithUploadedFile_(
     invoiceId,
@@ -207,12 +238,10 @@ function updateInvoiceFilesWithUploadedFile_(
   );
 }
 
-function invoiceSafeUploadedFileName_(name) {
-  return String(name || "Uploaded Invoice")
-    .replace(/[\\/:*?"<>|]/g, "")
-    .trim()
-    .substring(0, 180);
-}
+
+/************************************
+ * COMPLETION SCREEN
+ ************************************/
 
 function buildInvoiceUploadCompletedBlocks_(invoiceName) {
   return [
@@ -232,4 +261,16 @@ function buildInvoiceUploadCompletedBlocks_(invoiceName) {
       ]
     }
   ];
+}
+
+
+/************************************
+ * HELPERS
+ ************************************/
+
+function invoiceSafeUploadedFileName_(name) {
+  return String(name || "Uploaded Invoice")
+    .replace(/[\\/:*?"<>|]/g, "")
+    .trim()
+    .substring(0, 180);
 }

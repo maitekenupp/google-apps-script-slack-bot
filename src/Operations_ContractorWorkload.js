@@ -1,6 +1,11 @@
 /************************************
  * IZA - Contractor Workload Report
- * File: contractorworkload.gs
+ * File: Operations_ContractorWorkload.gs
+ ************************************/
+
+
+/************************************
+ * CONTRACTOR WORKLOAD ENTRY POINT
  ************************************/
 
 function handleContractorWorkloadButton_(channelId, messageTs, userId) {
@@ -11,7 +16,8 @@ function handleContractorWorkloadButton_(channelId, messageTs, userId) {
     "Loading Contractor Workload"
   );
 
-  const reportText = buildContractorWorkloadReport_();
+  const reportText =
+    buildContractorWorkloadReport_();
 
   updateIzaMenu(
     channelId,
@@ -27,92 +33,171 @@ function buildContractorWorkloadLoadingBlocks_() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "👤 *Contractor Workload*\n\nReviewing contractor assignments..."
+        text:
+          "👤 *Contractor Workload*\n\n" +
+          "Reviewing contractor assignments, billed hours, and remaining hours..."
       }
     }
   ];
 }
 
+
+/************************************
+ * CONTRACTOR WORKLOAD REPORT
+ ************************************/
+
 function buildContractorWorkloadReport_() {
-  const assignmentRows = queryAllDataSourceRows_(PROJECT_ASSIGNMENTS_DATA_SOURCE_ID);
-  const billedByAssignment = getBilledHoursByAssignment_();
+  const assignmentRows =
+    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+
+  const projectsById =
+    loadContractorWorkloadProjectsById_();
 
   const contractors = {};
 
   assignmentRows.forEach(row => {
     const p = row.properties;
 
-    const contractorStatus = getText_(p['Contractor Status']);
-    if (contractorStatus.toLowerCase() !== 'active') return;
+    const contractorName =
+      getText_(p["Contractor"]);
 
-    const contractor =
-      getText_(p['Contractor']) ||
-      'Unknown Contractor';
+    if (!contractorName) {
+      return;
+    }
 
-    const contractedHours = getNumber_(p['Hours in Contract']);
-    const billedHours = roundHours_(billedByAssignment[row.id] || 0);
-    const projectNames = getMultiSelectNames_(p['Projects']);
+    const projectId =
+      p["Projects 1 related to"]?.relation?.[0]?.id || "";
 
-    if (!contractors[contractor]) {
-      contractors[contractor] = {
+    const project =
+      projectsById[projectId];
+
+    if (!project) {
+      return;
+    }
+
+    const role =
+      getMultiSelectNames_(p["Role"]).join(", ") ||
+      getText_(p["Role"]) ||
+      "Role";
+
+    const contractedHours =
+      getNumber_(p["Hours to Contractor"]);
+
+    const billedHistorical =
+      getNumber_(p["Billed Historical"]);
+
+    const billedCurrent =
+      getNumber_(p["Billed"]);
+
+    const billedTotal =
+      roundHours_(billedHistorical + billedCurrent);
+
+    const remainingHours =
+      roundHours_(contractedHours - billedTotal);
+
+    const rate =
+      getNumber_(p["Rate per Hour"]);
+
+    if (!contractors[contractorName]) {
+      contractors[contractorName] = {
         totalContracted: 0,
         totalBilled: 0,
+        totalRemaining: 0,
+        totalValue: 0,
         projects: {}
       };
     }
 
-    contractors[contractor].totalContracted += contractedHours;
-    contractors[contractor].totalBilled += billedHours;
+    contractors[contractorName].totalContracted += contractedHours;
+    contractors[contractorName].totalBilled += billedTotal;
+    contractors[contractorName].totalRemaining += remainingHours;
+    contractors[contractorName].totalValue += contractedHours * rate;
 
-    projectNames.forEach(projectName => {
-      if (!contractors[contractor].projects[projectName]) {
-        contractors[contractor].projects[projectName] = {
-          contracted: 0,
-          billed: 0
-        };
-      }
+    if (!contractors[contractorName].projects[project.name]) {
+      contractors[contractorName].projects[project.name] = [];
+    }
 
-      contractors[contractor].projects[projectName].contracted += contractedHours;
-      contractors[contractor].projects[projectName].billed += billedHours;
+    contractors[contractorName].projects[project.name].push({
+      role,
+      projectStatus: project.status,
+      contractedHours,
+      billedHistorical,
+      billedCurrent,
+      billedTotal,
+      remainingHours,
+      rate
     });
   });
 
-  let report = "👤 *Contractor Workload*\n\n";
+  return formatContractorWorkloadReport_(contractors);
+}
 
-  Object.keys(contractors)
-    .sort()
-    .forEach(contractor => {
-      const data = contractors[contractor];
+function formatContractorWorkloadReport_(contractors) {
+  let report =
+    "👤 *Contractor Workload*\n\n";
 
-      const projectCount = Object.keys(data.projects).length;
-      const totalContracted = roundHours_(data.totalContracted);
-      const totalBilled = roundHours_(data.totalBilled);
-      const utilization =
-            totalContracted > 0
-              ? (totalBilled / totalContracted) * 100
-              : 0;
+  const contractorNames =
+    Object.keys(contractors).sort();
 
-      report +=
-        `*${contractor}*\n` +
-        `📁 Projects: ${projectCount}\n` +
-        `⏱️ Used Hours: ${totalBilled}/${totalContracted}\n` +
-        `📈 Utilization: ${utilization.toFixed(1)}%\n`;
+  if (!contractorNames.length) {
+    return report + "No contractor assignments found.";
+  }
 
-      Object.keys(data.projects)
-        .sort()
-        .forEach(projectName => {
-          const project = data.projects[projectName];
+  contractorNames.forEach(contractorName => {
+    const data =
+      contractors[contractorName];
 
-          report +=
-            `• ${projectName}: ` +
-            `${roundHours_(project.billed)}/${roundHours_(project.contracted)} hrs\n`;
-        });
+    const totalContracted =
+      roundHours_(data.totalContracted);
 
-      report += "\n";
-    });
+    const totalBilled =
+      roundHours_(data.totalBilled);
+
+    const totalRemaining =
+      roundHours_(data.totalRemaining);
+
+    const utilization =
+      totalContracted > 0
+        ? (totalBilled / totalContracted) * 100
+        : 0;
+
+    const projectCount =
+      Object.keys(data.projects).length;
+
+    report +=
+      `*${contractorName}*\n` +
+      `📁 Projects: ${projectCount}\n` +
+      `⏱️ Used Hours: ${totalBilled}/${totalContracted}\n` +
+      `🧮 Remaining Hours: ${totalRemaining}\n` +
+      `📈 Utilization: ${utilization.toFixed(1)}%\n` +
+      `💵 Contract Value: ${formatContractorWorkloadMoney_(data.totalValue)}\n`;
+
+    Object.keys(data.projects)
+      .sort()
+      .forEach(projectName => {
+        report += `• *${projectName}*\n`;
+
+        data.projects[projectName]
+          .sort((a, b) => a.role.localeCompare(b.role))
+          .forEach(item => {
+            report +=
+              `  - ${item.role}: ` +
+              `${item.billedTotal}/${item.contractedHours} hrs ` +
+              `(${item.remainingHours} left) ` +
+              `| ${item.projectStatus || "No status"}\n`;
+          });
+      });
+
+    report += "\n";
+  });
 
   return report.trim();
 }
+
+
+/************************************
+ * CONTRACTOR WORKLOAD BLOCKS
+ ************************************/
 
 function buildContractorWorkloadBlocks_(reportText) {
   const safeText =
@@ -131,9 +216,41 @@ function buildContractorWorkloadBlocks_(reportText) {
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "menu_operations"),
-        button_("🏠 Main Menu", "menu_main")
+        button_("⬅️ Back", "admin_contractors_menu")
       ]
     }
   ];
+}
+
+
+/************************************
+ * CONTRACTOR WORKLOAD HELPERS
+ ************************************/
+
+function loadContractorWorkloadProjectsById_() {
+  const rows =
+    queryAllDataSourceRows_(PROJECTS_OVERVIEW_DATA_SOURCE_ID);
+
+  const projects = {};
+
+  rows.forEach(row => {
+    projects[row.id] = {
+      id: row.id,
+      name:
+        getText_(row.properties["Project Name"]) ||
+        "Untitled Project",
+      status:
+        getText_(row.properties["Project Status"]) ||
+        "No Status"
+    };
+  });
+
+  return projects;
+}
+
+function formatContractorWorkloadMoney_(value) {
+  return "$" + Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 }

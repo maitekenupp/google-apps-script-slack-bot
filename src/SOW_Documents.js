@@ -4,9 +4,15 @@
  * File: SOW_Documents.gs
  *
  * Purpose:
- * Creates contractor SOW draft documents and final PDFs.
+ * Creates contractor SOW Google Doc drafts and final
+ * pending-signature PDF files.
  *
  ******************************************************/
+
+
+/************************************
+ * CREATE GOOGLE DOC DRAFT
+ ************************************/
 
 function createContractorSowDraft_(sowData) {
   const templateFile =
@@ -15,7 +21,8 @@ function createContractorSowDraft_(sowData) {
   const folder =
     DriveApp.getFolderById(CONTRACTOR_SOW_FOLDER_ID);
 
-  const docName = sowData.fileName.replace(/\.pdf$/i, "");
+  const docName =
+    String(sowData.fileName || "SOW Draft").replace(/\.pdf$/i, "");
 
   const copiedDoc = templateFile.makeCopy(
     docName,
@@ -35,6 +42,11 @@ function createContractorSowDraft_(sowData) {
     url: copiedDoc.getUrl()
   };
 }
+
+
+/************************************
+ * FINALIZE PDF
+ ************************************/
 
 function finalizeContractorSowPdf_(draftDocId, pdfFileName) {
   const folder =
@@ -57,6 +69,11 @@ function finalizeContractorSowPdf_(draftDocId, pdfFileName) {
   };
 }
 
+
+/************************************
+ * FILL TEMPLATE
+ ************************************/
+
 function fillContractorSowDocument_(body, sowData) {
   replaceSowPlaceholder_(body, "{{Contractor Name}}", sowData.contractorName);
   replaceSowPlaceholder_(body, "{{Project Name}}", sowData.projectName);
@@ -68,7 +85,7 @@ function fillContractorSowDocument_(body, sowData) {
 
   replaceSowPlaceholder_(body, "{{Role}}", sowData.roleSummary);
   replaceSowPlaceholder_(body, "{{Deliverables}}", sowData.deliverablesSummary);
-  replaceSowPlaceholder_(body, "{{Hours to Contractor}}", String(sowData.totalHoursToContractor));
+  replaceSowPlaceholder_(body, "{{Hours to Contractor}}", String(sowData.totalHoursToContractor || 0));
 
   replaceSowPlaceholder_(body, "{{Scope of Services}}", sowData.scopeOfServices);
   replaceSowPlaceholder_(body, "{{Estimated Level of Effort}}", sowData.estimatedLevelOfEffort);
@@ -77,6 +94,11 @@ function fillContractorSowDocument_(body, sowData) {
   replaceSowPlaceholder_(body, "{{Total Compensation Cap}}", sowFormatMoney_(sowData.totalCompensationCap));
   replaceSowPlaceholder_(body, "{{Date}}", sowData.date);
 }
+
+
+/************************************
+ * PLACEHOLDER HELPERS
+ ************************************/
 
 function replaceSowPlaceholder_(element, placeholder, value) {
   element.replaceText(

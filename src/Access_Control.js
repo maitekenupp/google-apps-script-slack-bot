@@ -1,3 +1,19 @@
+/******************************************************
+ *
+ * IZA
+ * File: Access_Control.gs
+ *
+ * Purpose:
+ * Reads IZA user roles from Team Directory and controls
+ * access to admin and contractor menus.
+ *
+ ******************************************************/
+
+
+/************************************
+ * TEAM DIRECTORY USERS
+ ************************************/
+
 function loadTeamDirectoryUsers_() {
   const cache = CacheService.getScriptCache();
   const cached = cache.get("TEAM_DIRECTORY_USERS");
@@ -10,12 +26,19 @@ function loadTeamDirectoryUsers_() {
 
   const users = rows
     .map(row => {
-      const name = getText_(row.properties["Name"]);
-      const rate = getNumber_(row.properties["Standard Rate"]);
-      const slackId = getText_(row.properties["Slack UID"]);
-      const izaRole = normalizeIzaRole_(
-        getText_(row.properties["IZA Role"])
-      );
+      const p = row.properties;
+
+      const name =
+        getText_(p["Name"]);
+
+      const rate =
+        getNumber_(p["Standard Rate"]);
+
+      const slackId =
+        getText_(p["Slack UID"]);
+
+      const izaRole =
+        normalizeIzaRole_(getText_(p["IZA Role"]));
 
       return {
         id: row.id,
@@ -30,10 +53,19 @@ function loadTeamDirectoryUsers_() {
     .filter(user => user.name)
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  cache.put("TEAM_DIRECTORY_USERS", JSON.stringify(users), 300);
+  cache.put(
+    "TEAM_DIRECTORY_USERS",
+    JSON.stringify(users),
+    300
+  );
 
   return users;
 }
+
+
+/************************************
+ * ROLE NORMALIZATION
+ ************************************/
 
 function normalizeIzaRole_(role) {
   return String(role || "")
@@ -44,7 +76,9 @@ function normalizeIzaRole_(role) {
 function getIzaUser_(slackUserId) {
   const users = loadTeamDirectoryUsers_();
 
-  return users.find(user => user.slackId === slackUserId) || null;
+  return users.find(user =>
+    user.slackId === slackUserId
+  ) || null;
 }
 
 function getIzaUserRole_(slackUserId) {
@@ -53,8 +87,14 @@ function getIzaUserRole_(slackUserId) {
   return user?.izaRole || "inactive";
 }
 
+
+/************************************
+ * ROLE CHECKS
+ ************************************/
+
 function isIzaOwner_(slackUserId) {
-  return getIzaUserRole_(slackUserId).includes("owner");
+  return getIzaUserRole_(slackUserId)
+    .includes("owner");
 }
 
 function isIzaAdmin_(slackUserId) {
@@ -75,6 +115,21 @@ function isIzaContractor_(slackUserId) {
     role.includes("contractor")
   );
 }
+
+function isIzaActiveUser_(slackUserId) {
+  const role = getIzaUserRole_(slackUserId);
+
+  return (
+    role.includes("owner") ||
+    role.includes("admin") ||
+    role.includes("contractor")
+  );
+}
+
+
+/************************************
+ * ACCESS GUARDS
+ ************************************/
 
 function requireIzaAdmin_(userId, channelId) {
   if (isIzaAdmin_(userId)) {
@@ -99,6 +154,20 @@ function requireIzaContractor_(userId, channelId) {
     channelId,
     userId,
     "Sorry, this action is only available to IZA contractors."
+  );
+
+  return false;
+}
+
+function requireIzaActiveUser_(userId, channelId) {
+  if (isIzaActiveUser_(userId)) {
+    return true;
+  }
+
+  sendEphemeralMessage(
+    channelId,
+    userId,
+    "Sorry, I could not find an active IZA profile for you."
   );
 
   return false;

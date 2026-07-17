@@ -1,3 +1,18 @@
+/******************************************************
+ *
+ * IZA
+ * File: Slack_Blocks.gs
+ *
+ * Purpose:
+ * Builds shared Slack Block Kit UI components and menus.
+ *
+ ******************************************************/
+
+
+/************************************
+ * SHARED BUTTON HELPERS
+ ************************************/
+
 function button_(text, actionId) {
   return {
     type: "button",
@@ -11,20 +26,39 @@ function button_(text, actionId) {
   };
 }
 
+function primaryButton_(text, actionId) {
+  const button = button_(text, actionId);
+  button.style = "primary";
+  return button;
+}
+
+function dangerButton_(text, actionId) {
+  const button = button_(text, actionId);
+  button.style = "danger";
+  return button;
+}
+
+
+/************************************
+ * MAIN MENU
+ ************************************/
+
 function buildMainMenuBlocks_(userId) {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `Hi <@${userId}> 👋\nHow can I help you today?`
+        text:
+          `Hi <@${userId}> 👋\n\n` +
+          "How can I help you today?"
       }
     },
     {
       type: "actions",
       elements: [
-        button_("📊 Projects", "menu_projects"),
-        button_("👥 Operations", "menu_operations"),
+        button_("🛠️ Admin", "admin_menu"),
+        button_("👤 Operations", "menu_operations"),
         button_("🐞 Report Bug", "bug_report_open")
       ]
     },
@@ -37,21 +71,33 @@ function buildMainMenuBlocks_(userId) {
   ];
 }
 
-function buildProjectsMenuBlocks_() {
+
+/************************************
+ * ADMIN MENUS
+ ************************************/
+
+function buildAdminMenuBlocks_() {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "📊 *Projects*"
+        text: "🛠️ *Admin*"
       }
     },
     {
       type: "actions",
       elements: [
-        button_("📋 Overview", "projects_overview"),
-        button_("➕ Create", "projects_create_menu"),
-        button_("🛠️ Admin", "projects_admin_menu")
+        button_("📊 Portfolio Overview", "ops_workload"),
+        button_("📁 Projects", "admin_projects_menu"),
+        button_("👥 Contractors", "admin_contractors_menu")
+      ]
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("💵 Invoices", "admin_invoices_menu"),
+        button_("📄 Signature Summary", "signature_summary")
       ]
     },
     {
@@ -63,57 +109,94 @@ function buildProjectsMenuBlocks_() {
   ];
 }
 
-function buildProjectsCreateMenuBlocks_() {
+function buildAdminProjectsMenuBlocks_() {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "➕ *Create*"
+        text: "📁 *Admin / Projects*"
       }
     },
     {
       type: "actions",
       elements: [
-        button_("📁 New Project", "project_new"),
+        button_("📋 Projects Overview", "projects_overview"),
+        button_("➕ New Project", "project_new"),
         button_("🏢 New Client", "client_new")
       ]
     },
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "menu_projects")
+        button_("👥 Add Roles", "existing_project_add_roles"),
+        button_("👷 Assign Contractors", "existing_project_assign_contractors")
+      ]
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", "admin_menu")
       ]
     }
   ];
 }
 
-function buildProjectsAdminMenuBlocks_() {
+function buildAdminContractorsMenuBlocks_() {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "🛠️ *Projects Admin*"
+        text: "👥 *Admin / Contractors*"
       }
     },
     {
       type: "actions",
       elements: [
-        button_("👥 Add Roles", "existing_project_add_roles"),
-        button_("👷 Assign Contractors", "existing_project_assign_contractors"),
+        button_("👤 Contractor Workload", "ops_contractor_workload"),
         button_("📌 Role Claims", "claims_admin_menu"),
-        button_("🗓️ Invoice Window", "invoice_window_admin")
+        button_("⏱️ Extension Requests", "extension_admin_menu")
       ]
     },
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "menu_projects")
+        button_("⬅️ Back", "admin_menu")
       ]
     }
   ];
 }
+
+function buildAdminInvoicesMenuBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "💵 *Admin / Invoices*"
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("🗓️ Invoice Window", "invoice_window_admin"),
+        button_("📊 Invoice Summary", "invoice_summary_admin")
+      ]
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", "admin_menu")
+      ]
+    }
+  ];
+}
+
+
+/************************************
+ * CONTRACTOR OPERATIONS MENU
+ ************************************/
 
 function buildOperationsMenuBlocks_() {
   return [
@@ -121,16 +204,15 @@ function buildOperationsMenuBlocks_() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "👥 *Operations*\nChoose a report:"
+        text: "👤 *Operations*"
       }
     },
     {
       type: "actions",
       elements: [
-        button_("📁 Portfolio Overview", "ops_workload"),
-        button_("👤 Contractor Workload", "ops_contractor_workload"),
-        button_("⏱️ Request Extension", "extension_start"),
-        button_("💵 Submit Invoice", "invoice_start")
+        button_("👤 My Workload", "my_workload"),
+        button_("💵 Submit Invoice", "invoice_start"),
+        button_("⏱️ Request Extension", "extension_start")
       ]
     },
     {
@@ -141,6 +223,28 @@ function buildOperationsMenuBlocks_() {
     }
   ];
 }
+
+
+/************************************
+ * BACKWARD COMPATIBILITY MENUS
+ ************************************/
+
+function buildProjectsMenuBlocks_() {
+  return buildAdminProjectsMenuBlocks_();
+}
+
+function buildProjectsCreateMenuBlocks_() {
+  return buildAdminProjectsMenuBlocks_();
+}
+
+function buildProjectsAdminMenuBlocks_() {
+  return buildAdminProjectsMenuBlocks_();
+}
+
+
+/************************************
+ * SIMPLE MESSAGE BLOCKS
+ ************************************/
 
 function buildGoodbyeBlocks_(userId) {
   return [
@@ -156,19 +260,21 @@ function buildGoodbyeBlocks_(userId) {
   ];
 }
 
-function buildComingSoonBlocks_(title) {
+function buildComingSoonBlocks_(title, backActionId) {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*${title}*\n\nThis feature is not connected yet.`
+        text:
+          `*${title}*\n\n` +
+          "This feature is not connected yet."
       }
     },
     {
       type: "actions",
       elements: [
-        button_("🏠 Main Menu", "menu_main")
+        button_("⬅️ Back", backActionId || "menu_main")
       ]
     }
   ];

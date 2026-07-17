@@ -4,9 +4,14 @@
  * File: Notion_Clients.gs
  *
  * Purpose:
- * Handles creating and reading clients in Notion.
+ * Creates client records in Notion.
  *
  ******************************************************/
+
+
+/************************************
+ * CREATE CLIENT
+ ************************************/
 
 function createNotionClient_(clientData) {
   const payload = {
@@ -25,7 +30,7 @@ function createNotionClient_(clientData) {
       },
       "CLIENT TYPE": {
         status: {
-          name: clientData.clientType
+          name: clientData.clientType || "Non-RFP"
         }
       },
       "Contact Person": {

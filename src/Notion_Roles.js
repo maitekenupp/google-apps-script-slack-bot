@@ -4,36 +4,62 @@
  * File: Notion_Roles.gs
  *
  * Purpose:
- * Handles role defaults and project role creation in Notion.
+ * Reads role defaults and creates project role records
+ * in Notion.
  *
  ******************************************************/
 
+
+/************************************
+ * ROLE OPTIONS
+ ************************************/
+
 function loadNotionRoleOptions_() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get("NOTION_ROLE_OPTIONS");
+  const cache =
+    CacheService.getScriptCache();
+
+  const cached =
+    cache.get("NOTION_ROLE_OPTIONS");
 
   if (cached) {
     return JSON.parse(cached);
   }
 
-  const rows = queryAllDataSourceRows_(ROLES_DATA_SOURCE_ID);
+  const rows =
+    queryAllDataSourceRows_(ROLES_DATA_SOURCE_ID);
 
-  const roles = rows
-    .map(row => ({
-      id: row.id,
-      label: getText_(row.properties["Role"]),
-      value: row.id,
-      defaultCompanyRate: getNumber_(row.properties["Default Company Rate"]),
-      defaultUnit: getText_(row.properties["Default Unit"]),
-      sortOrder: getNumber_(row.properties["Sort Order"])
-    }))
-    .filter(role => role.label)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const roles =
+    rows
+      .map(row => ({
+        id: row.id,
+        label:
+          getText_(row.properties["Role"]),
+        value: row.id,
+        defaultCompanyRate:
+          getNumber_(row.properties["Default Company Rate"]),
+        defaultUnit:
+          getText_(row.properties["Default Unit"]),
+        sortOrder:
+          getNumber_(row.properties["Sort Order"])
+      }))
+      .filter(role => role.label)
+      .sort((a, b) =>
+        a.sortOrder - b.sortOrder
+      );
 
-  cache.put("NOTION_ROLE_OPTIONS", JSON.stringify(roles), 300);
+  cache.put(
+    "NOTION_ROLE_OPTIONS",
+    JSON.stringify(roles),
+    300
+  );
 
   return roles;
 }
+
+
+/************************************
+ * CREATE PROJECT ROLE
+ ************************************/
 
 function createNotionProjectRole_(roleData) {
   const payload = {
@@ -80,7 +106,6 @@ function createNotionProjectRole_(roleData) {
           }
         ]
       }
-
     }
   };
 
@@ -90,6 +115,11 @@ function createNotionProjectRole_(roleData) {
     payload
   );
 }
+
+
+/************************************
+ * CACHE WARMER
+ ************************************/
 
 function warmRoleCache() {
   loadNotionRoleOptions_();

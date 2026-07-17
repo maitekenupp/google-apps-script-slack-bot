@@ -1,31 +1,107 @@
+/******************************************************
+ *
+ * IZA
+ * File: Slack_Router.gs
+ *
+ * Purpose:
+ * Routes Slack button clicks, dropdown selections, and modal submissions.
+ *
+ ******************************************************/
+
+
+/************************************
+ * BLOCK ACTION ROUTER
+ ************************************/
+
 function handleIzaButtonClick_(payload) {
   const context = getSlackActionContext_(payload);
   const actionId = context.actionId;
-  const channelId =
-    payload.channel?.id ||
-    payload.container?.channel_id ||
-    payload.view?.private_metadata?.channelId;
 
-  const messageTs =
-    payload.message?.ts ||
-    payload.container?.message_ts ||
-    payload.view?.private_metadata?.messageTs;
+  if (!canUserRunSlackAction_(actionId, context)) {
+    return;
+  }
 
-  const userId =
-    payload.user?.id;
+  if (routeMainMenuAction_(actionId, payload, context)) return;
+  if (routeAdminMenuAction_(actionId, payload, context)) return;
+  if (routeOperationsAction_(actionId, payload, context)) return;
+  if (routeProjectStatusAction_(actionId, payload, context)) return;
+  if (routeProjectCreationAction_(actionId, payload, context)) return;
+  if (routeRoleCreationAction_(actionId, payload, context)) return;
+  if (routeContractorAssignmentAction_(actionId, payload, context)) return;
+  if (routePublicRoleClaimAction_(actionId, payload, context)) return;
+  if (routeClaimsAdminAction_(actionId, payload, context)) return;
+  if (routeClientAction_(actionId, payload, context)) return;
+  if (routeExtensionAction_(actionId, payload, context)) return;
+  if (routeExistingProjectAction_(actionId, payload, context)) return;
+  if (routeInvoiceAction_(actionId, payload, context)) return;
+  if (routeInvoiceAdminAction_(actionId, payload, context)) return;
+  if (routeSowAction_(actionId, payload, context)) return;
 
+  sendEphemeralMessage(
+    context.channelId,
+    context.userId,
+    "I received that action, but it is not connected yet."
+  );
+}
+
+
+/************************************
+ * ACCESS CONTROL
+ ************************************/
+
+function canUserRunSlackAction_(actionId, context) {
   const publicActions = [
     "project_role_claim_start",
     "project_role_claim_submit_ephemeral",
     "role_claim_checkbox_select"
   ];
 
-  if (!publicActions.includes(actionId)) {
-    if (!requireIzaAdmin_(context.userId, context.channelId)) {
-      return;
-    }
+  const contractorActions = [
+    "menu_main",
+    "menu_operations",
+    "menu_close",
+    "bug_report_open",
+
+    "invoice_start",
+    "invoice_assignment_select",
+    "invoice_assignment_previous",
+    "invoice_open_line_modal",
+    "invoice_create_confirm",
+    "invoice_create_with_upload",
+    "invoice_cancel",
+    "invoice_pay_to_yes",
+    "invoice_pay_to_edit",
+    "invoice_add_another",
+    "invoice_upload_cancel",
+    "invoice_finish_review",
+
+    "extension_start",
+    "extension_assignment_select",
+    "extension_previous",
+    "extension_cancel",
+    "extension_open_modal",
+    "extension_cancel_request",
+
+    "my_workload"
+  ];
+
+  if (publicActions.includes(actionId)) {
+    return true;
   }
 
+  if (contractorActions.includes(actionId)) {
+    return requireIzaContractor_(context.userId, context.channelId);
+  }
+
+  return requireIzaAdmin_(context.userId, context.channelId);
+}
+
+
+/************************************
+ * MAIN MENU ROUTES
+ ************************************/
+
+function routeMainMenuAction_(actionId, payload, context) {
   if (actionId === "menu_main") {
     updateIzaMenu(
       context.channelId,
@@ -33,57 +109,7 @@ function handleIzaButtonClick_(payload) {
       buildMainMenuBlocks_(context.userId),
       "IZA Main Menu"
     );
-    return;
-  }
-
-  if (actionId === "menu_projects") {
-    updateIzaMenu(
-      context.channelId,
-      context.messageTs,
-      buildProjectsMenuBlocks_(),
-      "IZA Projects Menu"
-    );
-    return;
-  }
-
-  if (actionId === "bug_report_open") {
-    openBugReportModal_(
-      payload.trigger_id,
-      context.userId,
-      context.channelId,
-      context.messageTs
-    );
-    return;
-  }
-
-  if (actionId === "projects_create_menu") {
-    updateIzaMenu(
-      context.channelId,
-      context.messageTs,
-      buildProjectsCreateMenuBlocks_(),
-      "Projects Create Menu"
-    );
-    return;
-  }
-
-  if (actionId === "projects_admin_menu") {
-    updateIzaMenu(
-      context.channelId,
-      context.messageTs,
-      buildProjectsAdminMenuBlocks_(),
-      "Projects Admin Menu"
-    );
-    return;
-  }
-
-  if (actionId === "menu_operations") {
-    updateIzaMenu(
-      context.channelId,
-      context.messageTs,
-      buildOperationsMenuBlocks_(),
-      "IZA Operations Menu"
-    );
-    return;
+    return true;
   }
 
   if (actionId === "menu_close") {
@@ -96,16 +122,162 @@ function handleIzaButtonClick_(payload) {
       buildGoodbyeBlocks_(context.userId),
       "Goodbye"
     );
-    return;
+    return true;
   }
 
+  if (actionId === "bug_report_open") {
+    openBugReportModal_(
+      context.triggerId,
+      context.userId,
+      context.channelId,
+      context.messageTs
+    );
+    return true;
+  }
+
+  return false;
+}
+
+
+/************************************
+ * ADMIN MENU ROUTES
+ ************************************/
+
+function routeAdminMenuAction_(actionId, payload, context) {
+  if (actionId === "admin_menu") {
+    updateIzaMenu(
+      context.channelId,
+      context.messageTs,
+      buildAdminMenuBlocks_(),
+      "IZA Admin Menu"
+    );
+    return true;
+  }
+
+  if (
+    actionId === "admin_projects_menu" ||
+    actionId === "menu_projects" ||
+    actionId === "projects_create_menu" ||
+    actionId === "projects_admin_menu"
+  ) {
+    updateIzaMenu(
+      context.channelId,
+      context.messageTs,
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
+    );
+    return true;
+  }
+
+  if (actionId === "admin_contractors_menu") {
+    updateIzaMenu(
+      context.channelId,
+      context.messageTs,
+      buildAdminContractorsMenuBlocks_(),
+      "Admin Contractors"
+    );
+    return true;
+  }
+
+  if (actionId === "admin_invoices_menu") {
+    updateIzaMenu(
+      context.channelId,
+      context.messageTs,
+      buildAdminInvoicesMenuBlocks_(),
+      "Admin Invoices"
+    );
+    return true;
+  }
+
+  if (actionId === "ops_workload") {
+    handleWorkloadReportButton_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "ops_contractor_workload") {
+    handleContractorWorkloadButton_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "signature_summary") {
+    showSignatureSummary_(
+      context.channelId,
+      context.messageTs
+    );
+    return true;
+  }
+
+  if (actionId === "invoice_summary_admin") {
+    showInvoiceSummaryAdmin_(
+      context.channelId,
+      context.messageTs
+    );
+    return true;
+  }
+
+  if (actionId === "extension_admin_menu") {
+    updateIzaMenu(
+      context.channelId,
+      context.messageTs,
+      buildComingSoonBlocks_("⏱️ Extension Requests", "admin_contractors_menu"),
+      "Extension Requests"
+    );
+    return true;
+  }
+
+  return false;
+}
+
+
+/************************************
+ * CONTRACTOR OPERATIONS ROUTES
+ ************************************/
+
+function routeOperationsAction_(actionId, payload, context) {
+  if (actionId === "menu_operations") {
+    updateIzaMenu(
+      context.channelId,
+      context.messageTs,
+      buildOperationsMenuBlocks_(),
+      "IZA Operations Menu"
+    );
+    return true;
+  }
+
+  if (actionId === "my_workload") {
+    updateIzaMenu(
+      context.channelId,
+      context.messageTs,
+      buildComingSoonBlocks_("👤 My Workload", "menu_operations"),
+      "My Workload"
+    );
+    return true;
+  }
+
+  return false;
+}
+
+
+/************************************
+ * PROJECT STATUS ROUTES
+ ************************************/
+
+function routeProjectStatusAction_(actionId, payload, context) {
   if (actionId === "projects_overview") {
     handleProjectsOverviewButton_(
       context.channelId,
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_status_update_start") {
@@ -114,7 +286,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_status_project_select") {
@@ -124,7 +296,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_status_value_select") {
@@ -134,7 +306,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_status_confirm") {
@@ -143,7 +315,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_status_cancel") {
@@ -152,48 +324,30 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
-  if (actionId === "ops_workload") {
-    handleWorkloadReportButton_(
-      context.channelId,
-      context.messageTs,
-      context.userId
-    );
-    return;
-  }
+  return false;
+}
 
-  if (actionId === "ops_contractor_workload") {
-    handleContractorWorkloadButton_(
-      context.channelId,
-      context.messageTs,
-      context.userId
-    );
-    return;
-  }
 
-  if (actionId === "ops_projects_overview") {
-    handleProjectsOverviewButton_(
-      context.channelId,
-      context.messageTs,
-      context.userId
-    );
-    return;
-  }
+/************************************
+ * PROJECT CREATION ROUTES
+ ************************************/
 
+function routeProjectCreationAction_(actionId, payload, context) {
   if (actionId === "project_new") {
     startProjectFlow_(
       context.userId,
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_client_select") {
     handleProjectClientSelect_(payload);
-    return;
+    return true;
   }
 
   if (actionId === "project_client_next") {
@@ -202,7 +356,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_open_details_modal") {
@@ -212,7 +366,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.triggerId
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_details_previous") {
@@ -221,7 +375,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_details_next") {
@@ -230,7 +384,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (
@@ -238,7 +392,7 @@ function handleIzaButtonClick_(payload) {
     actionId === "project_end_date_select"
   ) {
     handleProjectDateSelect_(payload);
-    return;
+    return true;
   }
 
   if (actionId === "project_dates_previous") {
@@ -247,7 +401,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_dates_next") {
@@ -256,7 +410,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (
@@ -270,7 +424,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       actionId
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_status_previous") {
@@ -279,7 +433,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_status_next") {
@@ -288,7 +442,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_open_links_modal") {
@@ -298,7 +452,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.triggerId
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_links_previous") {
@@ -307,7 +461,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_links_next") {
@@ -316,7 +470,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_review_previous") {
@@ -325,7 +479,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_create_confirm") {
@@ -334,7 +488,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_create_cancel") {
@@ -343,19 +497,28 @@ function handleIzaButtonClick_(payload) {
     updateIzaMenu(
       context.channelId,
       context.messageTs,
-      buildProjectsCreateMenuBlocks_(),
-      "IZA Create Menu"
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
     );
-    return;
+    return true;
   }
 
+  return false;
+}
+
+
+/************************************
+ * ROLE CREATION ROUTES
+ ************************************/
+
+function routeRoleCreationAction_(actionId, payload, context) {
   if (actionId === "role_create_start") {
     startRoleFlow_(
       context.userId,
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "role_pricing_cdef") {
@@ -365,7 +528,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       true
     );
-    return;
+    return true;
   }
 
   if (actionId === "role_pricing_standard") {
@@ -375,12 +538,12 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       false
     );
-    return;
+    return true;
   }
 
   if (actionId === "role_select") {
     handleRoleSelect_(payload);
-    return;
+    return true;
   }
 
   if (actionId === "role_select_next") {
@@ -389,7 +552,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "role_open_details_modal") {
@@ -399,7 +562,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.triggerId
     );
-    return;
+    return true;
   }
 
   if (actionId === "role_details_previous") {
@@ -408,7 +571,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "role_details_next") {
@@ -417,7 +580,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "role_review_previous") {
@@ -426,7 +589,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "role_add_to_list") {
@@ -435,7 +598,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "role_add_another") {
@@ -444,7 +607,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "roles_create_confirm") {
@@ -453,7 +616,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "roles_cancel") {
@@ -462,21 +625,30 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
+  return false;
+}
+
+
+/************************************
+ * CONTRACTOR ASSIGNMENT ROUTES
+ ************************************/
+
+function routeContractorAssignmentAction_(actionId, payload, context) {
   if (actionId === "contractor_assign_start") {
     startContractorFlow_(
       context.userId,
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "contractor_select") {
     handleContractorSelect_(payload);
-    return;
+    return true;
   }
 
   if (actionId === "contractor_previous") {
@@ -485,7 +657,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "contractor_next") {
@@ -494,7 +666,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "contractor_review_previous") {
@@ -503,7 +675,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "contractor_create_confirm") {
@@ -512,7 +684,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "contractor_cancel") {
@@ -521,9 +693,18 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
+  return false;
+}
+
+
+/************************************
+ * PUBLIC ROLE CLAIM ROUTES
+ ************************************/
+
+function routePublicRoleClaimAction_(actionId, payload, context) {
   if (actionId === "project_role_claim_start") {
     openProjectRoleClaimModal_(
       context.userId,
@@ -532,21 +713,51 @@ function handleIzaButtonClick_(payload) {
       context.triggerId,
       context.actionValue
     );
-    return;
+    return true;
   }
 
   if (actionId === "project_role_claim_submit_ephemeral") {
     handleProjectRoleClaimEphemeralSubmit_(payload);
-    return;
-  }
-
-  if (actionId === "project_role_claim_submit_ephemeral") {
-    handleProjectRoleClaimEphemeralSubmit_(payload);
-    return;
+    return true;
   }
 
   if (actionId === "role_claim_checkbox_select") {
-    return;
+    return true;
+  }
+
+  return false;
+}
+
+
+/************************************
+ * CLAIMS ADMIN ROUTES
+ ************************************/
+
+function routeClaimsAdminAction_(actionId, payload, context) {
+  if (actionId === "claims_admin_menu") {
+    showClaimsAdminMenu_(
+      context.channelId,
+      context.messageTs
+    );
+    return true;
+  }
+
+  if (actionId === "claims_view_project") {
+    handleClaimsViewProject_(
+      context.channelId,
+      context.messageTs,
+      context.actionValue
+    );
+    return true;
+  }
+
+  if (actionId === "claims_view_role") {
+    handleClaimsViewRole_(
+      context.channelId,
+      context.messageTs,
+      context.actionValue
+    );
+    return true;
   }
 
   if (actionId === "claims_view_single_claim") {
@@ -555,7 +766,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.actionValue
     );
-    return;
+    return true;
   }
 
   if (actionId === "claims_back_to_single_claim_message") {
@@ -564,9 +775,36 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.actionValue
     );
-    return;
+    return true;
   }
 
+  if (actionId === "claims_assign_person") {
+    handleClaimsAssignPerson_(
+      context.channelId,
+      context.messageTs,
+      context.actionValue
+    );
+    return true;
+  }
+
+  if (actionId === "claims_close_announcement") {
+    handleClaimsCloseAnnouncement_(
+      context.channelId,
+      context.messageTs,
+      context.actionValue
+    );
+    return true;
+  }
+
+  return false;
+}
+
+
+/************************************
+ * CLIENT ROUTES
+ ************************************/
+
+function routeClientAction_(actionId, payload, context) {
   if (actionId === "client_new") {
     openClientModal_(
       context.userId,
@@ -574,7 +812,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.triggerId
     );
-    return;
+    return true;
   }
 
   if (actionId === "client_edit") {
@@ -584,7 +822,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.triggerId
     );
-    return;
+    return true;
   }
 
   if (actionId === "client_create_confirm") {
@@ -593,7 +831,7 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "client_create_cancel") {
@@ -602,63 +840,28 @@ function handleIzaButtonClick_(payload) {
     updateIzaMenu(
       context.channelId,
       context.messageTs,
-      buildProjectsMenuBlocks_(),
-      "IZA Projects Menu"
+      buildAdminProjectsMenuBlocks_(),
+      "Admin Projects"
     );
-    return;
+    return true;
   }
 
-  if (actionId === "claims_admin_menu") {
-    showClaimsAdminMenu_(
-      context.channelId,
-      context.messageTs
-    );
-    return;
-  }
+  return false;
+}
 
-  if (actionId === "claims_view_project") {
-    handleClaimsViewProject_(
-      context.channelId,
-      context.messageTs,
-      context.actionValue
-    );
-    return;
-  }
 
-  if (actionId === "claims_view_role") {
-    handleClaimsViewRole_(
-      context.channelId,
-      context.messageTs,
-      context.actionValue
-    );
-    return;
-  }
+/************************************
+ * EXTENSION ROUTES
+ ************************************/
 
-  if (actionId === "claims_assign_person") {
-    handleClaimsAssignPerson_(
-      context.channelId,
-      context.messageTs,
-      context.actionValue
-    );
-    return;
-  }
-
-  if (actionId === "claims_close_announcement") {
-    handleClaimsCloseAnnouncement_(
-      context.channelId,
-      context.messageTs,
-      context.actionValue
-    );
-    return;
-  }
-
+function routeExtensionAction_(actionId, payload, context) {
   if (actionId === "extension_start") {
     handleExtensionStart_(
       context.channelId,
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "extension_assignment_select") {
@@ -668,7 +871,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "extension_previous") {
@@ -677,7 +880,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "extension_cancel") {
@@ -686,7 +889,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "extension_open_modal") {
@@ -694,7 +897,7 @@ function handleIzaButtonClick_(payload) {
       payload,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "extension_approve") {
@@ -702,9 +905,9 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs,
       context.userId,
-      payload.actions[0].value
+      context.actionValue
     );
-    return;
+    return true;
   }
 
   if (actionId === "extension_deny") {
@@ -712,9 +915,9 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs,
       context.userId,
-      payload.actions[0].value
+      context.actionValue
     );
-    return;
+    return true;
   }
 
   if (actionId === "extension_cancel_request") {
@@ -722,9 +925,9 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs,
       context.userId,
-      payload.actions[0].value
+      context.actionValue
     );
-    return;
+    return true;
   }
 
   if (actionId === "extension_finalize_amendment") {
@@ -732,19 +935,28 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs,
       context.userId,
-      payload.actions[0].value
+      context.actionValue
     );
-    return;
+    return true;
   }
 
-  if (actionId === "existing_project_add_roles") {
-  showExistingProjectRoleSelect_(
-    context.userId,
-    context.channelId,
-    context.messageTs
-  );
-  return;
+  return false;
 }
+
+
+/************************************
+ * EXISTING PROJECT ROUTES
+ ************************************/
+
+function routeExistingProjectAction_(actionId, payload, context) {
+  if (actionId === "existing_project_add_roles") {
+    showExistingProjectRoleSelect_(
+      context.userId,
+      context.channelId,
+      context.messageTs
+    );
+    return true;
+  }
 
   if (actionId === "existing_project_assign_contractors") {
     showExistingProjectContractorSelect_(
@@ -752,27 +964,45 @@ function handleIzaButtonClick_(payload) {
       context.channelId,
       context.messageTs
     );
-    return;
+    return true;
   }
 
   if (actionId === "existing_project_roles_select") {
     handleExistingProjectRolesSelect_(payload);
-    return;
+    return true;
   }
 
   if (actionId === "existing_project_contractors_select") {
     handleExistingProjectContractorsSelect_(payload);
-    return;
+    return true;
   }
 
+  return false;
+}
+
+
+/************************************
+ * INVOICE ROUTES
+ ************************************/
+
+function routeInvoiceAction_(actionId, payload, context) {
   if (actionId === "invoice_start") {
-    handleInvoiceStart_(channelId, messageTs, userId);
-    return;
+    handleInvoiceStart_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
   }
 
   if (actionId === "invoice_assignment_select") {
-    handleInvoiceAssignmentSelect_(payload, channelId, messageTs, userId);
-    return;
+    handleInvoiceAssignmentSelect_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
   }
 
   if (actionId === "invoice_assignment_previous") {
@@ -781,52 +1011,26 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "invoice_open_line_modal") {
-    handleInvoiceOpenLineModal_(payload, channelId, messageTs, userId);
-    return;
+    handleInvoiceOpenLineModal_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
   }
 
   if (actionId === "invoice_create_confirm") {
-    handleInvoiceCreateConfirm_(channelId, messageTs, userId);
-    return;
-  }
-
-  if (actionId === "invoice_cancel") {
-    handleInvoiceCancel_(channelId, messageTs, userId);
-    return;
-  }
-
-  if (actionId === "invoice_pay_to_yes") {
-    handleInvoicePayToYes_(channelId, messageTs, userId);
-    return;
-  }
-
-  if (actionId === "invoice_pay_to_edit") {
-    handleInvoicePayToEdit_(payload, channelId, messageTs, userId);
-    return;
-  }
-
-  if (actionId === "invoice_add_another") {
-    handleInvoiceAddAnother_(channelId, messageTs, userId);
-    return;
-  }
-
-  if (actionId === "invoice_window_admin") {
-    handleInvoiceWindowAdmin_(channelId, messageTs, userId);
-    return;
-  }
-
-  if (actionId === "invoice_window_open_modal") {
-    handleInvoiceWindowOpenModal_(payload, channelId, messageTs, userId);
-    return;
-  }
-
-  if (actionId === "invoice_window_close") {
-    handleInvoiceWindowClose_(channelId, messageTs, userId);
-    return;
+    handleInvoiceCreateConfirm_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
   }
 
   if (actionId === "invoice_create_with_upload") {
@@ -836,7 +1040,44 @@ function handleIzaButtonClick_(payload) {
       context.userId,
       true
     );
-    return;
+    return true;
+  }
+
+  if (actionId === "invoice_cancel") {
+    handleInvoiceCancel_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "invoice_pay_to_yes") {
+    handleInvoicePayToYes_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "invoice_pay_to_edit") {
+    handleInvoicePayToEdit_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "invoice_add_another") {
+    handleInvoiceAddAnother_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
   }
 
   if (actionId === "invoice_upload_cancel") {
@@ -845,7 +1086,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "invoice_finish_review") {
@@ -854,9 +1095,55 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
+  return false;
+}
+
+
+/************************************
+ * INVOICE ADMIN ROUTES
+ ************************************/
+
+function routeInvoiceAdminAction_(actionId, payload, context) {
+  if (actionId === "invoice_window_admin") {
+    handleInvoiceWindowAdmin_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "invoice_window_open_modal") {
+    handleInvoiceWindowOpenModal_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "invoice_window_close") {
+    handleInvoiceWindowClose_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  return false;
+}
+
+
+/************************************
+ * SOW ROUTES
+ ************************************/
+
+function routeSowAction_(actionId, payload, context) {
   if (actionId === "sow_generate_for_project") {
     handleSowGenerateForProject_(
       payload,
@@ -864,7 +1151,7 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
   if (actionId === "sow_finalize_for_project") {
@@ -874,59 +1161,166 @@ function handleIzaButtonClick_(payload) {
       context.messageTs,
       context.userId
     );
-    return;
+    return true;
   }
 
-  sendEphemeralMessage(
-    context.channelId,
-    context.userId,
-    "I received that action, but it is not connected yet."
+  return false;
+}
+
+
+/************************************
+ * ADMIN SUMMARY HELPERS
+ ************************************/
+
+function showInvoiceSummaryAdmin_(channelId, messageTs) {
+  const summary = buildInvoiceWindowCloseSummary_();
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: summary
+        }
+      },
+      {
+        type: "actions",
+        elements: [
+          button_("⬅️ Back", "admin_invoices_menu")
+        ]
+      }
+    ],
+    "Invoice Summary"
   );
 }
 
+function showSignatureSummary_(channelId, messageTs) {
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "📄 *Signature Summary*\n\n" +
+            "Checking pending and signed documents..."
+        }
+      }
+    ],
+    "Loading Signature Summary"
+  );
+
+  const result = scanHelloSignRequestedSignatures_();
+
+  if (
+    !result.signed.length &&
+    !result.pendingToSend.length &&
+    !result.awaitingSignature.length
+  ) {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text:
+              "📄 *Signature Summary*\n\n" +
+              "No pending signature documents found."
+          }
+        },
+        {
+          type: "actions",
+          elements: [
+            button_("⬅️ Back", "admin_menu")
+          ]
+        }
+      ],
+      "Signature Summary"
+    );
+    return;
+  }
+
+  const blocks = buildSowSignatureFolderSummaryBlocks_(result);
+
+  blocks.push({
+    type: "actions",
+    elements: [
+      button_("⬅️ Back", "admin_menu")
+    ]
+  });
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    blocks,
+    "Signature Summary"
+  );
+}
+
+
+/************************************
+ * MODAL SUBMISSION ROUTER
+ ************************************/
+
 function handleSlackViewSubmission_(payload) {
-  if (payload.view.callback_id === "project_details_submit") {
+  const callbackId = payload.view.callback_id;
+
+  if (callbackId === "project_details_submit") {
     return handleProjectDetailsSubmit_(payload);
   }
 
-  if (payload.view.callback_id === "project_links_submit") {
+  if (callbackId === "project_links_submit") {
     return handleProjectLinksSubmit_(payload);
   }
 
-  if (payload.view.callback_id === "role_details_submit") {
+  if (callbackId === "role_details_submit") {
     return handleRoleDetailsSubmit_(payload);
   }
 
-  if (payload.view.callback_id === "project_role_claim_submit") {
+  if (callbackId === "project_role_claim_submit") {
     return handleProjectRoleClaimSubmit_(payload);
   }
 
-  if (payload.view.callback_id === "extension_request_submit") {
+  if (callbackId === "extension_request_submit") {
     return handleExtensionRequestModalSubmit_(payload);
   }
 
-  if (payload.view.callback_id === "client_modal_submit") {
+  if (callbackId === "client_modal_submit") {
     return handleClientModalSubmit_(payload);
   }
 
-  if (payload.view.callback_id === "invoice_line_submit") {
+  if (callbackId === "invoice_line_submit") {
     return handleInvoiceLineModalSubmission_(payload);
   }
 
-  if (payload.view.callback_id === "invoice_pay_to_submit") {
+  if (callbackId === "invoice_pay_to_submit") {
     return handleInvoicePayToModalSubmission_(payload);
   }
 
-  if (payload.view.callback_id === "invoice_window_submit") {
+  if (callbackId === "invoice_window_submit") {
     return handleInvoiceWindowModalSubmission_(payload);
   }
 
-  if (payload.view.callback_id === "bug_report_submit") {
+  if (callbackId === "bug_report_submit") {
     return handleBugReportModalSubmit_(payload);
   }
 
-  return { response_action: "clear" };
+  return {
+    response_action: "clear"
+  };
 }
+
+
+/************************************
+ * CONTEXT PARSER
+ ************************************/
 
 function getSlackActionContext_(payload) {
   const action = payload.actions[0];
@@ -937,18 +1331,18 @@ function getSlackActionContext_(payload) {
     triggerId: payload.trigger_id || null,
 
     channelId:
-      payload.channel && payload.channel.id
-        ? payload.channel.id
-        : payload.container.channel_id,
+      payload.channel?.id ||
+      payload.container?.channel_id ||
+      payload.view?.private_metadata?.channelId ||
+      null,
 
     messageTs:
-      payload.message && payload.message.ts
-        ? payload.message.ts
-        : payload.container.message_ts,
+      payload.message?.ts ||
+      payload.container?.message_ts ||
+      payload.view?.private_metadata?.messageTs ||
+      null,
 
     userId:
-      payload.user && payload.user.id
-        ? payload.user.id
-        : null
+      payload.user?.id || null
   };
 }

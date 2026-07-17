@@ -7,12 +7,12 @@
  * Central Slack API communication layer.
  *
  * Responsibilities:
- * • Call Slack API methods
- * • Send Slack messages
- * • Update Slack messages
- * • Send ephemeral messages
- * • Open DMs
- * • Open modals
+ * - Call Slack API methods
+ * - Send Slack messages
+ * - Update Slack messages
+ * - Send ephemeral messages
+ * - Open DMs
+ * - Open modals
  *
  ******************************************************/
 
@@ -24,22 +24,27 @@
 function callSlackApi_(method, payload) {
   const token = PropertiesService
     .getScriptProperties()
-    .getProperty('SLACK_BOT_TOKEN');
+    .getProperty("SLACK_BOT_TOKEN");
+
+  if (!token) {
+    throw new Error("Missing SLACK_BOT_TOKEN script property.");
+  }
 
   const response = UrlFetchApp.fetch(
     `https://slack.com/api/${method}`,
     {
-      method: 'post',
-      contentType: 'application/json',
+      method: "post",
+      contentType: "application/json",
       headers: {
         Authorization: `Bearer ${token}`
       },
-      payload: JSON.stringify(payload),
+      payload: JSON.stringify(payload || {}),
       muteHttpExceptions: true
     }
   );
 
-  const result = JSON.parse(response.getContentText());
+  const raw = response.getContentText();
+  const result = JSON.parse(raw);
 
   if (!result.ok) {
     throw new Error(`${method} failed: ${result.error}`);
@@ -56,7 +61,7 @@ function callSlackApi_(method, payload) {
 function sendSlackMessage(channelId, text, blocks) {
   const payload = {
     channel: channelId,
-    text: text
+    text: text || "IZA message"
   };
 
   if (blocks) {
@@ -71,7 +76,7 @@ function updateIzaMenu(channelId, messageTs, blocks, text) {
     channel: channelId,
     ts: messageTs,
     text: text || "IZA Menu",
-    blocks: blocks
+    blocks: blocks || []
   });
 }
 
@@ -84,7 +89,7 @@ function sendEphemeralMessage(channelId, userId, text) {
   return callSlackApi_("chat.postEphemeral", {
     channel: channelId,
     user: userId,
-    text: text
+    text: text || "IZA received your action."
   });
 }
 
@@ -109,7 +114,7 @@ function openSlackDm(userId) {
 function openSlackModal_(triggerId, view) {
   return callSlackApi_("views.open", {
     trigger_id: triggerId,
-    view: view
+    view
   });
 }
 
@@ -128,8 +133,7 @@ function sendIzaMainMenu(channelId, userId) {
 
 
 /************************************
- * TEMPORARY BACKWARD COMPATIBILITY
- * Remove later after all files use callSlackApi_()
+ * BACKWARD COMPATIBILITY
  ************************************/
 
 function slackApi_(method, payload) {

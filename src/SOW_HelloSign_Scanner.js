@@ -4,10 +4,21 @@
  * File: SOW_HelloSign_Scanner.gs
  *
  * Purpose:
- * Scans HelloSign / Requested signatures folder and syncs
- * signed contract PDFs back into Notion.
+ * Scans the HelloSign / Requested signatures folder,
+ * detects manually signed documents, copies final signed
+ * files to the official signed folder, and links them
+ * back into Notion.
+ *
+ * Supports:
+ * - SOW
+ * - Amendment
  *
  ******************************************************/
+
+
+/************************************
+ * SCHEDULED SCAN
+ ************************************/
 
 function runScheduledSowSignatureFolderScan() {
   const result = scanHelloSignRequestedSignatures_();
@@ -37,8 +48,44 @@ function runScheduledSowSignatureFolderScan() {
   return result;
 }
 
+function setupSowSignatureScanTrigger() {
+  const functionName = "runScheduledSowSignatureFolderScan";
+
+  ScriptApp
+    .getProjectTriggers()
+    .forEach(trigger => {
+      if (trigger.getHandlerFunction() === functionName) {
+        ScriptApp.deleteTrigger(trigger);
+      }
+    });
+
+  ScriptApp
+    .newTrigger(functionName)
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .create();
+}
+
+function isSowSignatureNotificationHours_() {
+  const hour = Number(
+    Utilities.formatDate(
+      new Date(),
+      "America/Los_Angeles",
+      "H"
+    )
+  );
+
+  return hour >= 9 && hour < 21;
+}
+
+
+/************************************
+ * SCAN FOLDERS
+ ************************************/
+
 function scanHelloSignRequestedSignatures_() {
-  const pendingSows = loadPendingSignatureSows_();
+  const pendingItems = loadPendingSignatureSows_();
   const helloSignFiles = loadHelloSignRequestedSignatureFiles_();
 
   const result = {
@@ -47,22 +94,22 @@ function scanHelloSignRequestedSignatures_() {
     awaitingSignature: []
   };
 
-  pendingSows.forEach(sow => {
-    const match = findHelloSignMatchForSow_(sow, helloSignFiles);
+  pendingItems.forEach(item => {
+    const match = findHelloSignMatchForSow_(item, helloSignFiles);
 
     if (!match) {
-      result.pendingToSend.push(sow);
+      result.pendingToSend.push(item);
       return;
     }
 
     if (match.status === "awaiting") {
       result.awaitingSignature.push({
-        ...sow,
+        ...item,
         helloSignFileName: match.file.name,
         helloSignFileUrl: match.file.url,
         documentType:
           getSignatureDocumentTypeFromTitle_(
-            match.file.name || sow.pendingFileName
+            match.file.name || item.pendingFileName
           )
       });
       return;
@@ -71,23 +118,23 @@ function scanHelloSignRequestedSignatures_() {
     if (match.status === "signed") {
       const signedFile = copyHelloSignSignedSowToOfficialFolder_(
         match.file,
-        sow
+        item
       );
 
       updateSowContractorFileForAssignments_(
-        sow.assignmentIds,
+        item.assignmentIds,
         signedFile
       );
 
-      trashOldPendingSowFile_(sow.pendingFileUrl);
+      trashOldPendingSowFile_(item.pendingFileUrl);
 
       result.signed.push({
-        ...sow,
+        ...item,
         signedFileName: signedFile.name,
         signedFileUrl: signedFile.url,
         documentType:
           getSignatureDocumentTypeFromTitle_(
-            match.file.name || sow.pendingFileName
+            match.file.name || item.pendingFileName
           )
       });
     }
@@ -119,9 +166,94 @@ function loadHelloSignRequestedSignatureFiles_() {
   return items;
 }
 
-function findHelloSignMatchForSow_(sow, helloSignFiles) {
-  const projectKey = normalizeSowMatchText_(sow.projectName);
-  const contractorKey = normalizeSowMatchText_(sow.contractorName);
+
+/************************************
+ * PENDING SIGNATURE ITEMS FROM NOTION
+ ************************************/
+
+function loadPendingSignatureSows_() {
+  const assignmentRows =
+    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+
+  const projectsById = loadSowProjectsById_();
+  const groups = {};
+
+  assignmentRows.forEach(row => {
+    const p = row.properties;
+
+    const contractorName = getText_(p["Contractor"]);
+    if (!contractorName) return;
+
+    const projectId =
+      p["Projects 1 related to"]?.relation?.[0]?.id || "";
+
+    const project = projectsById[projectId];
+    if (!project) return;
+
+    const signatureFile =
+      getSowContractorFirstFile_(p["SOW Contractor"]);
+
+    if (!signatureFile || !signatureFile.url) return;
+
+    const fileName = String(signatureFile.name || "");
+
+    if (fileName.toLowerCase().indexOf("pending signature") === -1) {
+      return;
+    }
+
+    const role =
+      getSowAssignmentRole_(p) || "Role";
+
+    const fileId =
+      extractGoogleDriveFileId_(signatureFile.url) ||
+      row.id;
+
+    const key =
+      `${projectId.substring(0, 8)}_${contractorName.substring(0, 20)}_${fileId.substring(0, 12)}`
+        .replace(/[^a-zA-Z0-9_-]/g, "");
+
+    if (!groups[key]) {
+      groups[key] = {
+        key,
+        projectId,
+        projectName: project.name || "Project",
+        contractorName,
+        pendingFileName: signatureFile.name,
+        pendingFileUrl: signatureFile.url,
+        documentType: getSignatureDocumentTypeFromTitle_(signatureFile.name),
+        roles: [],
+        assignmentIds: []
+      };
+    }
+
+    groups[key].roles.push(role);
+    groups[key].assignmentIds.push(row.id);
+  });
+
+  return Object.keys(groups)
+    .map(key => {
+      const item = groups[key];
+
+      item.roleSummary = item.roles
+        .filter((role, index, array) => array.indexOf(role) === index)
+        .join(", ");
+
+      return item;
+    })
+    .sort((a, b) =>
+      a.projectName.localeCompare(b.projectName) ||
+      a.contractorName.localeCompare(b.contractorName)
+    );
+}
+
+
+/************************************
+ * MATCHING LOGIC
+ ************************************/
+
+function findHelloSignMatchForSow_(pendingItem, helloSignFiles) {
+  const projectKey = normalizeSowMatchText_(pendingItem.projectName);
+  const contractorKey = normalizeSowMatchText_(pendingItem.contractorName);
 
   const candidates = helloSignFiles
     .map(file => ({
@@ -184,31 +316,6 @@ function isHelloSignSignedFile_(file) {
   );
 }
 
-function copyHelloSignSignedSowToOfficialFolder_(helloSignFile, sow) {
-  const sourceFile = DriveApp.getFileById(helloSignFile.id);
-  const folder = DriveApp.getFolderById(CONTRACTOR_SIGNED_SOW_FOLDER_ID);
-
-  const documentType =
-    getSignatureDocumentTypeFromTitle_(
-      helloSignFile.name || sow.pendingFileName
-    );
-
-  const signedFileName = sowSafeFileName_(
-    `Signed ${documentType} - ${sow.projectName} - ${sow.contractorName}.pdf`
-  );
-
-  const copiedFile = sourceFile.makeCopy(
-    signedFileName,
-    folder
-  );
-
-  return {
-    id: copiedFile.getId(),
-    name: copiedFile.getName(),
-    url: copiedFile.getUrl()
-  };
-}
-
 function normalizeSowMatchText_(value) {
   return String(value || "")
     .toLowerCase()
@@ -228,6 +335,57 @@ function normalizeSowMatchText_(value) {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+
+/************************************
+ * SIGNED FILE COPY
+ ************************************/
+
+function copyHelloSignSignedSowToOfficialFolder_(helloSignFile, item) {
+  const sourceFile = DriveApp.getFileById(helloSignFile.id);
+  const folder = DriveApp.getFolderById(CONTRACTOR_SIGNED_SOW_FOLDER_ID);
+
+  const documentType =
+    getSignatureDocumentTypeFromTitle_(
+      helloSignFile.name || item.pendingFileName
+    );
+
+  const signedFileName = sowSafeFileName_(
+    `Signed ${documentType} - ${item.projectName} - ${item.contractorName}.pdf`
+  );
+
+  const copiedFile = sourceFile.makeCopy(
+    signedFileName,
+    folder
+  );
+
+  return {
+    id: copiedFile.getId(),
+    name: copiedFile.getName(),
+    url: copiedFile.getUrl()
+  };
+}
+
+function trashOldPendingSowFile_(fileUrl) {
+  const fileId = extractGoogleDriveFileId_(fileUrl);
+
+  if (!fileId) {
+    return;
+  }
+
+  try {
+    DriveApp
+      .getFileById(fileId)
+      .setTrashed(true);
+  } catch (err) {
+    Logger.log(`Could not trash old pending signature file: ${err.message}`);
+  }
+}
+
+
+/************************************
+ * SLACK MESSAGES
+ ************************************/
 
 function buildSignedSowReceivedBlocks_(item) {
   const documentType =
@@ -264,15 +422,7 @@ function buildSowSignatureFolderSummaryBlocks_(result) {
       `🔴 *Pending to send (${result.pendingToSend.length})* | <${folderUrl}|Review folder>\n`;
 
     result.pendingToSend.forEach(item => {
-      const documentType =
-        item.documentType ||
-        getSignatureDocumentTypeFromTitle_(item.pendingFileName);
-
-      text +=
-        `• ${documentType} — ` +
-        `${item.projectName} — ${item.contractorName}` +
-        (item.roleSummary ? ` — ${item.roleSummary}` : "") +
-        "\n";
+      text += buildSignatureSummaryItemLine_(item);
     });
 
     text += "\n";
@@ -283,17 +433,7 @@ function buildSowSignatureFolderSummaryBlocks_(result) {
       `🟡 *Awaiting signature (${result.awaitingSignature.length})*\n`;
 
     result.awaitingSignature.forEach(item => {
-      const documentType =
-        item.documentType ||
-        getSignatureDocumentTypeFromTitle_(
-          item.helloSignFileName || item.pendingFileName
-        );
-
-      text +=
-        `• ${documentType} — ` +
-        `${item.projectName} — ${item.contractorName}` +
-        (item.roleSummary ? ` — ${item.roleSummary}` : "") +
-        "\n";
+      text += buildSignatureSummaryItemLine_(item);
     });
 
     text += "\n";
@@ -310,124 +450,27 @@ function buildSowSignatureFolderSummaryBlocks_(result) {
   ];
 }
 
-function loadPendingSignatureSows_() {
-  const assignmentRows =
-    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
-
-  const projectsById = loadSowProjectsById_();
-  const groups = {};
-
-  assignmentRows.forEach(row => {
-    const p = row.properties;
-
-    const contractorName = getText_(p["Contractor"]);
-    if (!contractorName) return;
-
-    const projectId =
-      p["Projects 1 related to"]?.relation?.[0]?.id || "";
-
-    const project = projectsById[projectId];
-    if (!project) return;
-
-    const sowFile = getSowContractorFirstFile_(p["SOW Contractor"]);
-    if (!sowFile || !sowFile.url) return;
-
-    const fileName = String(sowFile.name || "");
-
-    if (fileName.toLowerCase().indexOf("pending signature") === -1) {
-      return;
-    }
-
-    const role = getSowAssignmentRole_(p) || "Role";
-
-    const fileId =
-      extractGoogleDriveFileId_(sowFile.url) ||
-      row.id;
-
-    const key =
-      `${projectId.substring(0, 8)}_${contractorName.substring(0, 20)}_${fileId.substring(0, 12)}`
-        .replace(/[^a-zA-Z0-9_-]/g, "");
-
-    if (!groups[key]) {
-      groups[key] = {
-        key,
-        projectId,
-        projectName: project.name || "Project",
-        contractorName,
-        pendingFileName: sowFile.name,
-        pendingFileUrl: sowFile.url,
-        documentType: getSignatureDocumentTypeFromTitle_(sowFile.name),
-        roles: [],
-        assignmentIds: []
-      };
-    }
-
-    groups[key].roles.push(role);
-    groups[key].assignmentIds.push(row.id);
-  });
-
-  return Object.keys(groups)
-    .map(key => {
-      const item = groups[key];
-
-      item.roleSummary = item.roles
-        .filter((role, index, array) => array.indexOf(role) === index)
-        .join(", ");
-
-      return item;
-    })
-    .sort((a, b) =>
-      a.projectName.localeCompare(b.projectName) ||
-      a.contractorName.localeCompare(b.contractorName)
+function buildSignatureSummaryItemLine_(item) {
+  const documentType =
+    item.documentType ||
+    getSignatureDocumentTypeFromTitle_(
+      item.helloSignFileName ||
+      item.pendingFileName ||
+      item.signedFileName
     );
-}
 
-function trashOldPendingSowFile_(fileUrl) {
-  const fileId = extractGoogleDriveFileId_(fileUrl);
-
-  if (!fileId) {
-    return;
-  }
-
-  try {
-    DriveApp
-      .getFileById(fileId)
-      .setTrashed(true);
-  } catch (err) {
-    Logger.log(`Could not trash old pending signature file: ${err.message}`);
-  }
-}
-
-function setupSowSignatureScanTrigger() {
-  const functionName = "runScheduledSowSignatureFolderScan";
-
-  ScriptApp
-    .getProjectTriggers()
-    .forEach(trigger => {
-      if (trigger.getHandlerFunction() === functionName) {
-        ScriptApp.deleteTrigger(trigger);
-      }
-    });
-
-  ScriptApp
-    .newTrigger(functionName)
-    .timeBased()
-    .everyDays(1)
-    .atHour(9)
-    .create();
-}
-
-function isSowSignatureNotificationHours_() {
-  const hour = Number(
-    Utilities.formatDate(
-      new Date(),
-      "America/Los_Angeles",
-      "H"
-    )
+  return (
+    `• ${documentType} — ` +
+    `${item.projectName} — ${item.contractorName}` +
+    (item.roleSummary ? ` — ${item.roleSummary}` : "") +
+    "\n"
   );
-
-  return hour >= 9 && hour < 21;
 }
+
+
+/************************************
+ * DOCUMENT TYPE
+ ************************************/
 
 function getSignatureDocumentTypeFromTitle_(title) {
   const text =

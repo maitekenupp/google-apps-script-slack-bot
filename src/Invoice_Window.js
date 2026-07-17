@@ -4,9 +4,15 @@
  * File: Invoice_Window.gs
  *
  * Purpose:
- * Controls contractor invoice submission window.
+ * Opens, closes, announces, and summarizes the contractor
+ * invoice submission window.
  *
  ******************************************************/
+
+
+/************************************
+ * ADMIN ENTRY POINTS
+ ************************************/
 
 function handleInvoiceWindowAdmin_(channelId, messageTs, userId) {
   const window = getInvoiceSubmissionWindow_();
@@ -36,9 +42,6 @@ function handleInvoiceWindowOpenModal_(payload, channelId, messageTs, userId) {
 
 function handleInvoiceWindowModalSubmission_(payload) {
   const metadata = JSON.parse(payload.view.private_metadata || "{}");
-  const channelId = metadata.channelId;
-  const messageTs = metadata.messageTs;
-
   const values = payload.view.state.values;
 
   const startDate =
@@ -70,8 +73,8 @@ function handleInvoiceWindowModalSubmission_(payload) {
   const window = getInvoiceSubmissionWindow_();
 
   updateIzaMenu(
-    channelId,
-    messageTs,
+    metadata.channelId,
+    metadata.messageTs,
     buildInvoiceWindowAdminBlocks_(window),
     "Invoice Window"
   );
@@ -93,23 +96,7 @@ function handleInvoiceWindowClose_(channelId, messageTs, userId) {
     "Invoice Window"
   );
 
-  postSlackMessage_(
-    CONTRACTOR_OPPORTUNITIES_CHANNEL,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "🔒 *Invoice submission is now closed.*\n\n" +
-            "New contractor invoices are no longer being accepted."
-        }
-      }
-    ],
-    "Invoice submission is now closed."
-  );
-
-  const summary = buildInvoiceWindowCloseSummary_();
+  postInvoiceWindowClosedAnnouncement_();
 
   postSlackMessage_(
     CONTRACTOR_CLAIMS_CHANNEL,
@@ -118,7 +105,7 @@ function handleInvoiceWindowClose_(channelId, messageTs, userId) {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: summary
+          text: buildInvoiceWindowCloseSummary_()
         }
       }
     ],
@@ -126,8 +113,9 @@ function handleInvoiceWindowClose_(channelId, messageTs, userId) {
   );
 }
 
+
 /************************************
- * BLOCKS
+ * ADMIN BLOCKS
  ************************************/
 
 function buildInvoiceWindowAdminBlocks_(window) {
@@ -156,13 +144,13 @@ function buildInvoiceWindowAdminBlocks_(window) {
       type: "actions",
       elements: [
         button_("🗓️ Set Dates", "invoice_window_open_modal"),
-        button_("🔒 Close Now", "invoice_window_close")
+        dangerButton_("🔒 Close Now", "invoice_window_close")
       ]
     },
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "projects_admin_menu")
+        button_("⬅️ Back", "admin_invoices_menu")
       ]
     }
   ];
@@ -221,6 +209,149 @@ function buildInvoiceWindowModalView_(privateMetadata, window) {
   };
 }
 
+
+/************************************
+ * WINDOW STATE
+ ************************************/
+
+function saveInvoiceSubmissionWindow_(startDate, endDate) {
+  const props = PropertiesService.getScriptProperties();
+
+  props.setProperty("INVOICE_WINDOW_START", startDate);
+  props.setProperty("INVOICE_WINDOW_END", endDate);
+}
+
+function closeInvoiceSubmissionWindow_() {
+  const props = PropertiesService.getScriptProperties();
+
+  props.deleteProperty("INVOICE_WINDOW_START");
+  props.deleteProperty("INVOICE_WINDOW_END");
+}
+
+function getInvoiceSubmissionWindow_() {
+  const props = PropertiesService.getScriptProperties();
+
+  const startDate = props.getProperty("INVOICE_WINDOW_START");
+  const endDate = props.getProperty("INVOICE_WINDOW_END");
+  const today = invoiceWindowToday_();
+
+  const isOpen =
+    Boolean(startDate) &&
+    Boolean(endDate) &&
+    today >= startDate &&
+    today <= endDate;
+
+  return {
+    startDate,
+    endDate,
+    today,
+    isOpen
+  };
+}
+
+function isInvoiceSubmissionWindowOpen_() {
+  return getInvoiceSubmissionWindow_().isOpen;
+}
+
+
+/************************************
+ * ANNOUNCEMENTS
+ ************************************/
+
+function postInvoiceWindowAnnouncement_(window) {
+  postSlackMessage_(
+    CONTRACTOR_OPPORTUNITIES_CHANNEL,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            ":loudspeaker: *Invoice & Payment Process Update*\n\n" +
+            "Hi <!everyone>!\n\n" +
+            "We are officially on the submission window:\n" +
+            `→ *Submission window:* ${invoiceWindowFormatLongDate_(window.startDate)} – ${invoiceWindowFormatLongDate_(window.endDate)}\n\n` +
+            "To submit your invoice, talk to IZA and go to:\n" +
+            "*Operations* → *Submit Invoice*\n\n" +
+            `Invoices submitted after ${invoiceWindowFormatLongDate_(window.endDate)} will be processed in the next month's payment cycle.\n` +
+            "Invoices will be processed after the window is closed.\n\n" +
+            "Thank you all for your cooperation :pray:\n" +
+            "Please react to this message to confirm you read it!"
+        }
+      }
+    ],
+    "Invoice & Payment Process Update"
+  );
+}
+
+function postInvoiceWindowClosedAnnouncement_() {
+  postSlackMessage_(
+    CONTRACTOR_OPPORTUNITIES_CHANNEL,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "🔒 *Invoice submission is now closed.*\n\n" +
+            "New contractor invoices are no longer being accepted."
+        }
+      }
+    ],
+    "Invoice submission is now closed."
+  );
+}
+
+function runDailyInvoiceWindowReminder() {
+  const windowData = getInvoiceSubmissionWindow_();
+
+  if (!windowData || !windowData.isOpen || !windowData.endDate) {
+    return;
+  }
+
+  const today = invoiceWindowToday_();
+
+  if (windowData.endDate !== today) {
+    return;
+  }
+
+  const reminderKey =
+    `INVOICE_WINDOW_LAST_DAY_REMINDER_${windowData.endDate}`;
+
+  const props = PropertiesService.getScriptProperties();
+
+  if (props.getProperty(reminderKey)) {
+    return;
+  }
+
+  postSlackMessage_(
+    CONTRACTOR_OPPORTUNITIES_CHANNEL,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "⏰ *Invoice Submission Reminder*\n\n" +
+            "Hi everyone!\n\n" +
+            "Today is the last day to submit invoices.\n" +
+            "The submission window closes tonight at *11:59 PM PT*.\n\n" +
+            "Please submit your invoice through IZA if you have one for this billing period.\n\n" +
+            "If you already submitted your invoice, please disregard this message."
+        }
+      }
+    ],
+    "Invoice submission reminder"
+  );
+
+  props.setProperty(reminderKey, new Date().toISOString());
+}
+
+
+/************************************
+ * CLOSE SUMMARY
+ ************************************/
+
 function buildInvoiceWindowCloseSummary_() {
   const contractors = loadInvoiceExpectedContractors_();
   const invoices = loadInvoicesForCurrentBillingMonth_();
@@ -261,7 +392,7 @@ function buildInvoiceWindowCloseSummary_() {
   let text =
     "💵 *Invoice Window Closed*\n\n" +
     `*Billing period:* ${billingPeriodText}\n\n` +
-    "*Submitted invoices:*\n";
+    `*Submitted invoices (${submitted.length}):*\n`;
 
   if (submitted.length) {
     submitted
@@ -276,7 +407,7 @@ function buildInvoiceWindowCloseSummary_() {
 
   text +=
     `\n*Total submitted:* ${invoiceFormatMoney_(totalSubmitted)}\n\n` +
-    "*Missed the window:*\n";
+    `*Missed the window (${missed.length}):*\n`;
 
   if (missed.length) {
     missed
@@ -291,130 +422,63 @@ function buildInvoiceWindowCloseSummary_() {
   return text.trim();
 }
 
-/************************************
- * WINDOW STATE
- ************************************/
+function loadInvoiceExpectedContractors_() {
+  const rows = queryAllDataSourceRows_(TEAM_DIRECTORY_DATA_SOURCE_ID);
 
-function saveInvoiceSubmissionWindow_(startDate, endDate) {
-  const props = PropertiesService.getScriptProperties();
+  return rows
+    .map(row => {
+      const name = getText_(row.properties["Name"]);
+      const slackId = getText_(row.properties["Slack UID"]);
+      const izaRole = getText_(row.properties["IZA Role"]);
 
-  props.setProperty("INVOICE_WINDOW_START", startDate);
-  props.setProperty("INVOICE_WINDOW_END", endDate);
+      return {
+        id: row.id,
+        name,
+        slackId,
+        izaRole
+      };
+    })
+    .filter(contractor =>
+      contractor.name &&
+      contractor.slackId &&
+      String(contractor.izaRole || "")
+        .toLowerCase()
+        .includes("contractor")
+    );
 }
 
-function closeInvoiceSubmissionWindow_() {
-  const props = PropertiesService.getScriptProperties();
+function loadInvoicesForCurrentBillingMonth_() {
+  const billingPeriod =
+    invoiceLastDayOfCurrentMonth_();
 
-  props.deleteProperty("INVOICE_WINDOW_START");
-  props.deleteProperty("INVOICE_WINDOW_END");
+  const rows = queryAllDataSourceRows_(CONTRACTORS_INVOICES_DATA_SOURCE_ID);
+
+  return rows
+    .map(row => {
+      const p = row.properties;
+
+      const contractorId =
+        p["Contractor"]?.relation?.[0]?.id || "";
+
+      const billingDate =
+        p["Billing Period"]?.date?.start || "";
+
+      return {
+        id: row.id,
+        contractorId,
+        billingDate,
+        totalAmount: getNumber_(p["Total Amount"])
+      };
+    })
+    .filter(invoice =>
+      invoice.contractorId &&
+      invoice.billingDate === billingPeriod
+    );
 }
 
-function getInvoiceSubmissionWindow_() {
-  const props = PropertiesService.getScriptProperties();
-
-  const startDate = props.getProperty("INVOICE_WINDOW_START");
-  const endDate = props.getProperty("INVOICE_WINDOW_END");
-  const today = invoiceWindowToday_();
-
-  const isOpen =
-    startDate &&
-    endDate &&
-    today >= startDate &&
-    today <= endDate;
-
-  return {
-    startDate,
-    endDate,
-    today,
-    isOpen
-  };
-}
-
-function isInvoiceSubmissionWindowOpen_() {
-  return getInvoiceSubmissionWindow_().isOpen;
-}
-
-/************************************
- * ANNOUNCEMENT
- ************************************/
-
-function postInvoiceWindowAnnouncement_(window) {
-  postSlackMessage_(
-    CONTRACTOR_OPPORTUNITIES_CHANNEL,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            ":loudspeaker: *Invoice & Payment Process Update*\n\n" +
-            "Hi <!everyone>!\n\n" +
-            "We are officially on the submission window:\n" +
-            `→ *Submission window:* ${invoiceWindowFormatLongDate_(window.startDate)} – ${invoiceWindowFormatLongDate_(window.endDate)}\n\n` +
-            "To submit your invoice, talk to IZA and go to:\n" +
-            "*Operations* → *Submit Invoice*\n\n" +
-            `Invoices submitted after ${invoiceWindowFormatLongDate_(window.endDate)} will be processed in the next month’s payment cycle.\n` +
-            "Invoices will be processed after the window is closed.\n\n" +
-            "Thank you all for your cooperation :pray:\n" +
-            "Please react to this message to confirm you read it!"
-        }
-      }
-    ],
-    "Invoice & Payment Process Update"
-  );
-}
-
-function runDailyInvoiceWindowReminder() {
-  const windowData = getInvoiceSubmissionWindow_();
-
-  if (!windowData || !windowData.isOpen || !windowData.endDate) {
-    return;
-  }
-
-  const today = Utilities.formatDate(
-    new Date(),
-    "America/Los_Angeles",
-    "yyyy-MM-dd"
-  );
-
-  if (windowData.endDate !== today) {
-    return;
-  }
-
-  const reminderKey =
-    `INVOICE_WINDOW_LAST_DAY_REMINDER_${windowData.endDate}`;
-
-  const props = PropertiesService.getScriptProperties();
-
-  if (props.getProperty(reminderKey)) {
-    return;
-  }
-
-  postSlackMessage_(
-    CONTRACTOR_OPPORTUNITIES_CHANNEL,
-    [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "⏰ *Invoice Submission Reminder*\n\n" +
-            "Hi everyone!\n\n" +
-            "Today is the last day to submit invoices.\n" +
-            "The submission window closes tonight at *11:59 PM PT*.\n\n" +
-            "Please submit your invoice through IZA if you have one for this billing period.\n\n" +
-            "If you already submitted your invoice, please disregard this message."
-        }
-      }
-    ],
-    "Invoice submission reminder"
-  );
-
-  props.setProperty(reminderKey, new Date().toISOString());
-}
 
 /************************************
- * HELPERS
+ * DATE HELPERS
  ************************************/
 
 function invoiceWindowToday_() {
@@ -469,58 +533,4 @@ function invoiceWindowOrdinalSuffix_(day) {
   if (lastDigit === 3) return "rd";
 
   return "th";
-}
-
-function loadInvoiceExpectedContractors_() {
-  const rows = queryAllDataSourceRows_(TEAM_DIRECTORY_DATA_SOURCE_ID);
-
-  return rows
-    .map(row => {
-      const name = getText_(row.properties["Name"]);
-      const slackId = getText_(row.properties["Slack UID"]);
-      const izaRole = getText_(row.properties["IZA Role"]);
-
-      return {
-        id: row.id,
-        name,
-        slackId,
-        izaRole
-      };
-    })
-    .filter(contractor =>
-      contractor.name &&
-      contractor.slackId &&
-      String(contractor.izaRole || "")
-      .toLowerCase()
-      .includes("contractor")
-    );
-}
-
-function loadInvoicesForCurrentBillingMonth_() {
-  const billingPeriod =
-    invoiceLastDayOfCurrentMonth_();
-
-  const rows = queryAllDataSourceRows_(CONTRACTORS_INVOICES_DATA_SOURCE_ID);
-
-  return rows
-    .map(row => {
-      const p = row.properties;
-
-      const contractorId =
-        p["Contractor"]?.relation?.[0]?.id || "";
-
-      const billingDate =
-        p["Billing Period"]?.date?.start || "";
-
-      return {
-        id: row.id,
-        contractorId,
-        billingDate,
-        totalAmount: getNumber_(p["Total Amount"])
-      };
-    })
-    .filter(invoice =>
-      invoice.contractorId &&
-      invoice.billingDate === billingPeriod
-    );
 }

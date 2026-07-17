@@ -1,39 +1,73 @@
-function saveProjectSession_(userId, session) {
+/******************************************************
+ *
+ * IZA
+ * File: Session_Store.gs
+ *
+ * Purpose:
+ * Small wrappers around Script Properties for active
+ * user sessions.
+ *
+ * Notes:
+ * - These sessions are temporary workflow state.
+ * - Long-term records live in Notion, not here.
+ *
+ ******************************************************/
+
+
+/************************************
+ * GENERIC SESSION HELPERS
+ ************************************/
+
+function saveSession_(prefix, userId, session) {
   PropertiesService.getScriptProperties()
     .setProperty(
-      `PROJECT_SESSION_${userId}`,
-      JSON.stringify(session)
+      `${prefix}_${userId}`,
+      JSON.stringify(session || {})
     );
+}
+
+function getSession_(prefix, userId) {
+  const raw = PropertiesService.getScriptProperties()
+    .getProperty(`${prefix}_${userId}`);
+
+  return raw ? JSON.parse(raw) : null;
+}
+
+function clearSession_(prefix, userId) {
+  PropertiesService.getScriptProperties()
+    .deleteProperty(`${prefix}_${userId}`);
+}
+
+
+/************************************
+ * PROJECT SESSION
+ ************************************/
+
+function saveProjectSession_(userId, session) {
+  saveSession_("PROJECT_SESSION", userId, session);
 }
 
 function getProjectSession_(userId) {
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(`PROJECT_SESSION_${userId}`);
-
-  return raw ? JSON.parse(raw) : null;
+  return getSession_("PROJECT_SESSION", userId);
 }
 
 function clearProjectSession_(userId) {
-  PropertiesService.getScriptProperties()
-    .deleteProperty(`PROJECT_SESSION_${userId}`);
+  clearSession_("PROJECT_SESSION", userId);
 }
 
+
+/************************************
+ * CLIENT SESSION
+ ************************************/
+
 function saveClientSession_(userId, session) {
-  PropertiesService.getScriptProperties()
-    .setProperty(
-      `CLIENT_SESSION_${userId}`,
-      JSON.stringify(session)
-    );
+  saveSession_("CLIENT_SESSION", userId, session);
 }
 
 function getClientSession_(userId) {
-  const raw = PropertiesService.getScriptProperties()
-    .getProperty(`CLIENT_SESSION_${userId}`);
-
-  return raw ? JSON.parse(raw) : null;
+  return getSession_("CLIENT_SESSION", userId);
 }
 
 function clearClientSession_(userId) {
-  PropertiesService.getScriptProperties()
-    .deleteProperty(`CLIENT_SESSION_${userId}`);
+  clearSession_("CLIENT_SESSION", userId);
 }

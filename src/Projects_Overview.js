@@ -1,11 +1,11 @@
 /************************************
  * IZA - Projects Overview
- * File: projectsoverview.gs
+ * File: Projects_Overview.gs
  ************************************/
 
 
 /************************************
- * PROJECTS OVERVIEW BUTTON
+ * PROJECTS OVERVIEW ENTRY POINT
  ************************************/
 
 function handleProjectsOverviewButton_(channelId, messageTs, userId) {
@@ -16,7 +16,8 @@ function handleProjectsOverviewButton_(channelId, messageTs, userId) {
     "Loading Projects Overview"
   );
 
-  const reportText = buildProjectsOverviewReport_();
+  const reportText =
+    buildProjectsOverviewReport_();
 
   updateIzaMenu(
     channelId,
@@ -26,22 +27,24 @@ function handleProjectsOverviewButton_(channelId, messageTs, userId) {
   );
 }
 
+
+/************************************
+ * PROJECTS OVERVIEW BLOCKS
+ ************************************/
+
 function buildProjectsOverviewLoadingBlocks_() {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "📋 *Projects Overview*\n\nReviewing the Notion project database..."
+        text:
+          "📋 *Projects Overview*\n\n" +
+          "Reviewing the Notion project database..."
       }
     }
   ];
 }
-
-
-/************************************
- * PROJECTS OVERVIEW BLOCKS
- ************************************/
 
 function buildProjectsOverviewBlocks_(reportText) {
   const safeText =
@@ -66,8 +69,7 @@ function buildProjectsOverviewBlocks_(reportText) {
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "menu_projects"),
-        button_("🏠 Main Menu", "menu_main")
+        button_("⬅️ Back", "admin_projects_menu")
       ]
     }
   ];

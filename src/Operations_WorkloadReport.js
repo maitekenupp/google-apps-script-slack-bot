@@ -1,11 +1,11 @@
 /************************************
- * IZA - Workload Report
- * File: workloadreport.gs
+ * IZA - Portfolio Overview
+ * File: Operations_WorkloadReport.gs
  ************************************/
 
 
 /************************************
- * WORKLOAD SUMMARY
+ * PORTFOLIO SUMMARY
  ************************************/
 
 function handleWorkloadReportButton_(channelId, messageTs, userId) {
@@ -13,16 +13,17 @@ function handleWorkloadReportButton_(channelId, messageTs, userId) {
     channelId,
     messageTs,
     buildWorkloadLoadingBlocks_(),
-    "Loading Workload Report"
+    "Loading Portfolio Overview"
   );
 
-  const report = buildManagementViewSections();
+  const report =
+    buildManagementViewSections();
 
   updateIzaMenu(
     channelId,
     messageTs,
     buildWorkloadSummaryBlocks_(report),
-    "Workload Report"
+    "Portfolio Overview"
   );
 }
 
@@ -32,7 +33,9 @@ function buildWorkloadLoadingBlocks_() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "📦 *Workload Report*\n\nReviewing the Notion tables..."
+        text:
+          "📊 *Portfolio Overview*\n\n" +
+          "Reviewing project assignments, billed hours, and remaining hours..."
       }
     }
   ];
@@ -65,8 +68,7 @@ function buildWorkloadSummaryBlocks_(report) {
     {
       type: "actions",
       elements: [
-        button_("⬅️ Back", "menu_operations"),
-        button_("🏠 Main Menu", "menu_main")
+        button_("⬅️ Back", "admin_menu")
       ]
     }
   ];
@@ -74,12 +76,15 @@ function buildWorkloadSummaryBlocks_(report) {
 
 
 /************************************
- * WORKLOAD CATEGORY DETAIL
+ * PORTFOLIO CATEGORY DETAIL
  ************************************/
 
 function handleWorkloadCategoryButton_(channelId, messageTs, categoryKey, title) {
-  const report = buildManagementViewSections();
-  const items = report[categoryKey] || [];
+  const report =
+    buildManagementViewSections();
+
+  const items =
+    report[categoryKey] || [];
 
   const text =
     `*${title}*\n\n` +
@@ -111,7 +116,7 @@ function buildWorkloadCategoryBlocks_(text) {
       type: "actions",
       elements: [
         button_("⬅️ Back to Summary", "ops_workload"),
-        button_("🏠 Main Menu", "menu_main")
+        button_("🛠️ Admin", "admin_menu")
       ]
     }
   ];

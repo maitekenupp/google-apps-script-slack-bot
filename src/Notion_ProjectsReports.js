@@ -3,8 +3,14 @@
  * File: Notion_ProjectsReports.gs
  ************************************/
 
+
+/************************************
+ * PROJECTS OVERVIEW REPORT
+ ************************************/
+
 function buildProjectsOverviewReport_() {
-  const rows = queryAllDataSourceRows_(PROJECTS_OVERVIEW_DATA_SOURCE_ID);
+  const rows =
+    queryAllDataSourceRows_(PROJECTS_OVERVIEW_DATA_SOURCE_ID);
 
   const groups = {};
 
@@ -12,18 +18,14 @@ function buildProjectsOverviewReport_() {
     const p = row.properties;
 
     const projectName =
-      getText_(p['Project Name']) ||
-      'Untitled Project';
+      getText_(p["Project Name"]) ||
+      "Untitled Project";
 
     const projectStatus =
-      getText_(p['Project Status']) ||
-      'No Status';
+      getText_(p["Project Status"]) ||
+      "No Status";
 
-    // Skip completed projects
-    if (
-      projectStatus === 'Done' ||
-      projectStatus === 'Canceled'
-    ) {
+    if (shouldHideProjectFromOverview_(projectStatus)) {
       return;
     }
 
@@ -34,34 +36,49 @@ function buildProjectsOverviewReport_() {
     groups[projectStatus].push(projectName);
   });
 
+  return formatProjectsOverviewReport_(groups);
+}
+
+
+/************************************
+ * REPORT FORMATTER
+ ************************************/
+
+function formatProjectsOverviewReport_(groups) {
   const order = [
-    'Quotation',
-    'Not Started',
-    'Paused',
-    'In progress',
-    'For Review',
-    'No Status'
+    "Quotation",
+    "Not Started",
+    "Paused",
+    "In progress",
+    "For Review",
+    "No Status"
   ];
 
   const statusIcons = {
-    'Quotation': '💰',
-    'Not Started': '⚪',
-    'Paused': '⏸️',
-    'In progress': '🟢',
-    'For Review': '🟡',
-    'No Status': '❓'
+    "Quotation": "💰",
+    "Not Started": "⚪",
+    "Paused": "⏸️",
+    "In progress": "🟢",
+    "For Review": "🟡",
+    "No Status": "❓"
   };
 
-  let report = '📋 *Projects Overview*\n\n';
+  let report =
+    "📋 *Projects Overview*\n\n";
 
   order.forEach(status => {
-    const projects = groups[status];
+    const projects =
+      groups[status];
 
-    if (!projects || projects.length === 0) return;
+    if (!projects || !projects.length) {
+      return;
+    }
 
-    const icon = statusIcons[status] || '📁';
+    const icon =
+      statusIcons[status] || "📁";
 
-    report += `*${icon} ${status}* (${projects.length})\n`;
+    report +=
+      `*${icon} ${status}* (${projects.length})\n`;
 
     projects
       .sort()
@@ -69,11 +86,20 @@ function buildProjectsOverviewReport_() {
         report += `• ${projectName}\n`;
       });
 
-    report += '\n';
+    report += "\n";
   });
 
-  return report.trim();
+  return report.trim() || "📋 *Projects Overview*\n\nNo active projects found.";
 }
 
 
+/************************************
+ * HELPERS
+ ************************************/
 
+function shouldHideProjectFromOverview_(projectStatus) {
+  return (
+    projectStatus === "Done" ||
+    projectStatus === "Canceled"
+  );
+}

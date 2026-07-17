@@ -10,40 +10,56 @@
 
 
 /************************************
- * LOAD CLIENT DROPDOWN OPTIONS
+ * CLIENT DROPDOWN OPTIONS
  ************************************/
 
 function loadNotionClientOptions_() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get("NOTION_CLIENT_OPTIONS");
+  const cache =
+    CacheService.getScriptCache();
+
+  const cached =
+    cache.get("NOTION_CLIENT_OPTIONS");
 
   if (cached) {
     return JSON.parse(cached);
   }
 
-  const rows = queryAllDataSourceRows_(CLIENTS_DATA_SOURCE_ID);
+  const rows =
+    queryAllDataSourceRows_(CLIENTS_DATA_SOURCE_ID);
 
-  const clients = rows
-    .map(row => {
-      const name = getText_(row.properties['Name']);
+  const clients =
+    rows
+      .map(row => {
+        const name =
+          getText_(row.properties["Name"]);
 
-      return {
-        id: row.id,
-        name: name,
-        label: name,
-        value: row.id
-      };
-    })
-    .filter(client => client.name)
-    .sort((a, b) => a.name.localeCompare(b.name));
+        return {
+          id: row.id,
+          name,
+          label: name,
+          value: row.id
+        };
+      })
+      .filter(client => client.name)
+      .sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
 
-  cache.put("NOTION_CLIENT_OPTIONS", JSON.stringify(clients), 300);
+  cache.put(
+    "NOTION_CLIENT_OPTIONS",
+    JSON.stringify(clients),
+    300
+  );
 
   return clients;
 }
 
-function createNotionProject_(answers) {
 
+/************************************
+ * CREATE PROJECT
+ ************************************/
+
+function createNotionProject_(answers) {
   const payload = {
     parent: {
       data_source_id: PROJECTS_OVERVIEW_DATA_SOURCE_ID
@@ -58,7 +74,6 @@ function createNotionProject_(answers) {
           }
         ]
       },
-
       "Client": {
         relation: [
           {
@@ -66,7 +81,6 @@ function createNotionProject_(answers) {
           }
         ]
       },
-
       "Short Description": {
         rich_text: [
           {
@@ -76,25 +90,21 @@ function createNotionProject_(answers) {
           }
         ]
       },
-
       "Project Start Date": {
         date: {
           start: answers["Project Dates"]?.startDate || null
         }
       },
-
       "Project End Date": {
         date: {
           start: answers["Project Dates"]?.endDate || null
         }
       },
-
       "Project Status": {
         status: {
           name: answers["Project Status"]
         }
       },
-
       "SOW File": {
         files: buildSowFilesPayload_(answers["SOW Files"])
       }
@@ -118,10 +128,12 @@ function applyDefaultProjectTemplate_(pageId) {
       }
     }
   );
-} 
+}
 
 function buildSowFilesPayload_(sowFiles) {
-  if (!sowFiles) return [];
+  if (!sowFiles) {
+    return [];
+  }
 
   const files = [];
 
@@ -148,47 +160,58 @@ function buildSowFilesPayload_(sowFiles) {
   return files;
 }
 
+
 /************************************
- * LOAD PROJECT DROPDOWN OPTIONS
+ * PROJECT DROPDOWN OPTIONS
  ************************************/
 
 function loadProjectsNeedingContractors_() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get("PROJECTS_NEEDING_CONTRACTORS");
+  const cache =
+    CacheService.getScriptCache();
+
+  const cached =
+    cache.get("PROJECTS_NEEDING_CONTRACTORS");
 
   if (cached) {
     return JSON.parse(cached);
   }
 
-  const rows = queryAllDataSourceRows_(PROJECTS_OVERVIEW_DATA_SOURCE_ID);
+  const rows =
+    queryAllDataSourceRows_(PROJECTS_OVERVIEW_DATA_SOURCE_ID);
 
-  const projects = rows
-    .filter(row => {
-      const relation =
-        row.properties["Contractors Assigned"]?.relation || [];
+  const projects =
+    rows
+      .filter(row => {
+        const relation =
+          row.properties["Contractors Assigned"]?.relation || [];
 
-      const status =
-        getText_(row.properties["Project Status"]);
+        const status =
+          getText_(row.properties["Project Status"]);
 
-      const allowedStatuses = [
-        "Quotation",
-        "Not Started",
-        "In Progress"
-      ];
+        const allowedStatuses = [
+          "Quotation",
+          "Not Started",
+          "In Progress",
+          "In progress"
+        ];
 
-      return (
-        relation.length === 0 &&
-        allowedStatuses.includes(status)
+        return (
+          relation.length === 0 &&
+          allowedStatuses.includes(status)
+        );
+      })
+      .map(row => ({
+        id: row.id,
+        label:
+          getText_(row.properties["Project Name"]),
+        value: row.id,
+        name:
+          getText_(row.properties["Project Name"])
+      }))
+      .filter(project => project.name)
+      .sort((a, b) =>
+        a.name.localeCompare(b.name)
       );
-    })
-    .map(row => ({
-      id: row.id,
-      label: getText_(row.properties["Project Name"]),
-      value: row.id,
-      name: getText_(row.properties["Project Name"])
-    }))
-    .filter(project => project.name)
-    .sort((a, b) => a.name.localeCompare(b.name));
 
   cache.put(
     "PROJECTS_NEEDING_CONTRACTORS",

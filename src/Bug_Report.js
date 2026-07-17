@@ -8,6 +8,11 @@
  *
  ******************************************************/
 
+
+/************************************
+ * OPEN MODAL
+ ************************************/
+
 function openBugReportModal_(triggerId, userId, channelId, messageTs) {
   const metadata = JSON.stringify({
     userId,
@@ -81,39 +86,10 @@ function buildBugReportModalView_(privateMetadata) {
   };
 }
 
-function sendBugReportToErrorChannel_(report) {
-  const timeText =
-    Utilities.formatDate(
-      new Date(),
-      "America/Los_Angeles",
-      "MMMM d, yyyy 'at' h:mm a"
-    );
 
-  sendSlackMessage(
-    IZA_ERROR_CHANNEL,
-    [
-      "🐞 *Bug Report*",
-      "",
-      `*Reported by:* <@${report.userId}>`,
-      `*Time:* ${timeText}`,
-      "",
-      `*Title:* ${report.title}`,
-      "",
-      "*Description:*",
-      report.description
-    ].join("\n")
-  );
-}
-
-function getBugReportSlackUserName_(userId) {
-  if (!userId) return "Unknown user";
-
-  try {
-    return getSlackUserName_(userId);
-  } catch (err) {
-    return userId;
-  }
-}
+/************************************
+ * MODAL SUBMIT
+ ************************************/
 
 function handleBugReportModalSubmit_(payload) {
   const values = payload.view.state.values;
@@ -150,6 +126,40 @@ function handleBugReportModalSubmit_(payload) {
   };
 }
 
+
+/************************************
+ * ERROR CHANNEL MESSAGE
+ ************************************/
+
+function sendBugReportToErrorChannel_(report) {
+  const timeText =
+    Utilities.formatDate(
+      new Date(),
+      "America/Los_Angeles",
+      "MMMM d, yyyy 'at' h:mm a"
+    );
+
+  sendSlackMessage(
+    IZA_ERROR_CHANNEL,
+    [
+      "🐞 *Bug Report*",
+      "",
+      `*Reported by:* <@${report.userId}>`,
+      `*Time:* ${timeText}`,
+      "",
+      `*Title:* ${report.title}`,
+      "",
+      "*Description:*",
+      report.description
+    ].join("\n")
+  );
+}
+
+
+/************************************
+ * CONFIRMATION SCREEN
+ ************************************/
+
 function buildBugReportSubmittedBlocks_() {
   return [
     {
@@ -159,7 +169,7 @@ function buildBugReportSubmittedBlocks_() {
         text:
           "🐞 *Bug reported!*\n\n" +
           "Thanks. I reported this to the tech team.\n\n" +
-           "_Let’s hope it’s not an infestation_ :fist::pensive:"
+          "_Let's hope it's not an infestation_ :fist::pensive:"
       }
     },
     {
@@ -169,4 +179,19 @@ function buildBugReportSubmittedBlocks_() {
       ]
     }
   ];
+}
+
+
+/************************************
+ * OPTIONAL USER HELPER
+ ************************************/
+
+function getBugReportSlackUserName_(userId) {
+  if (!userId) return "Unknown user";
+
+  try {
+    return getSlackUserName_(userId);
+  } catch (err) {
+    return userId;
+  }
 }

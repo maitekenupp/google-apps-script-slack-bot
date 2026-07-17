@@ -1,13 +1,18 @@
 /************************************
- * IZA - Notion Integration
+ * IZA - Notion Core + Portfolio Workload
  * File: Notion_CoreAndWorkload.gs
+ ************************************/
+
+
+/************************************
+ * NOTION CORE
  ************************************/
 
 function getNotionConfig_() {
   const props = PropertiesService.getScriptProperties();
 
   return {
-    token: props.getProperty('NOTION_TOKEN')
+    token: props.getProperty("NOTION_TOKEN")
   };
 }
 
@@ -42,7 +47,9 @@ function notionFetch_(url, method, payload) {
       }
 
       if (code === 429 || code >= 500) {
-        lastError = new Error(`Notion API temporary error ${code}: ${text}`);
+        lastError = new Error(
+          `Notion API temporary error ${code}: ${text}`
+        );
         Utilities.sleep(500 * attempt);
         continue;
       }
@@ -52,7 +59,8 @@ function notionFetch_(url, method, payload) {
     } catch (err) {
       lastError = err;
 
-      const message = String(err.message || "");
+      const message =
+        String(err.message || "");
 
       const isTemporary =
         message.includes("Address unavailable") ||
@@ -78,61 +86,89 @@ function queryAllDataSourceRows_(dataSourceId) {
   let startCursor = null;
 
   while (hasMore) {
-    const payload = startCursor ? { start_cursor: startCursor } : {};
+    const payload =
+      startCursor
+        ? { start_cursor: startCursor }
+        : {};
 
     const data = notionFetch_(
       `https://api.notion.com/v1/data_sources/${dataSourceId}/query`,
-      'post',
+      "post",
       payload
     );
 
-    results = results.concat(data.results || []);
-    hasMore = data.has_more;
-    startCursor = data.next_cursor;
+    results =
+      results.concat(data.results || []);
+
+    hasMore =
+      data.has_more;
+
+    startCursor =
+      data.next_cursor;
   }
 
   return results;
 }
 
+
+/************************************
+ * NOTION PROPERTY READERS
+ ************************************/
+
 function getText_(property) {
-  if (!property) return '';
+  if (!property) return "";
 
-  if (property.type === 'title') {
-    return (property.title || []).map(t => t.plain_text).join('');
+  if (property.type === "title") {
+    return (property.title || [])
+      .map(item => item.plain_text)
+      .join("");
   }
 
-  if (property.type === 'rich_text') {
-    return (property.rich_text || []).map(t => t.plain_text).join('');
+  if (property.type === "rich_text") {
+    return (property.rich_text || [])
+      .map(item => item.plain_text)
+      .join("");
   }
 
-  if (property.type === 'select') {
-    return property.select?.name || '';
+  if (property.type === "select") {
+    return property.select?.name || "";
   }
 
-  if (property.type === 'status') {
-    return property.status?.name || '';
+  if (property.type === "status") {
+    return property.status?.name || "";
   }
 
-  if (property.type === 'formula') {
-    if (property.formula.type === 'string') return property.formula.string || '';
-    if (property.formula.type === 'number') return String(property.formula.number || 0);
+  if (property.type === "formula") {
+    if (property.formula.type === "string") {
+      return property.formula.string || "";
+    }
+
+    if (property.formula.type === "number") {
+      return String(property.formula.number || 0);
+    }
   }
 
-  return '';
+  return "";
 }
 
 function getNumber_(property) {
   if (!property) return 0;
 
-  if (property.type === 'number') {
+  if (property.type === "number") {
     return property.number || 0;
   }
 
-  if (property.type === 'formula' && property.formula.type === 'number') {
+  if (
+    property.type === "formula" &&
+    property.formula.type === "number"
+  ) {
     return property.formula.number || 0;
   }
 
-  if (property.type === 'rollup' && property.rollup.type === 'number') {
+  if (
+    property.type === "rollup" &&
+    property.rollup.type === "number"
+  ) {
     return property.rollup.number || 0;
   }
 
@@ -140,160 +176,216 @@ function getNumber_(property) {
 }
 
 function getMultiSelectNames_(property) {
-  if (!property || property.type !== 'multi_select') return [];
-  return (property.multi_select || []).map(item => item.name);
+  if (!property || property.type !== "multi_select") {
+    return [];
+  }
+
+  return (property.multi_select || [])
+    .map(item => item.name);
 }
 
 function getRelationIds_(property) {
-  if (!property || property.type !== 'relation') return [];
-  return (property.relation || []).map(item => item.id);
+  if (!property || property.type !== "relation") {
+    return [];
+  }
+
+  return (property.relation || [])
+    .map(item => item.id);
 }
 
 function roundHours_(value) {
   return Math.round((value || 0) * 100) / 100;
 }
 
-/**
- * Invoice table:
- * Each invoice row has:
- * - Hours Worked
- * - Billed Hours - Invoice Table relation
- *
- * This builds:
- * assignmentPageId -> total billed hours
- */
-function getBilledHoursByAssignment_() {
-  const invoiceRows = queryAllDataSourceRows_(INVOICE_DATA_SOURCE_ID);
-  const billedByAssignment = {};
 
-  invoiceRows.forEach(row => {
-    const p = row.properties;
-
-    const hoursWorked = getNumber_(p['Hours Worked']);
-    const assignmentIds = getRelationIds_(p['Billed Hours - Invoice Table']);
-
-    assignmentIds.forEach(assignmentId => {
-      if (!billedByAssignment[assignmentId]) {
-        billedByAssignment[assignmentId] = 0;
-      }
-
-      billedByAssignment[assignmentId] += hoursWorked;
-    });
-  });
-
-  return billedByAssignment;
-}
+/************************************
+ * PORTFOLIO WORKLOAD DATA
+ ************************************/
 
 function buildManagementView() {
-  const assignmentRows = queryAllDataSourceRows_(PROJECT_ASSIGNMENTS_DATA_SOURCE_ID);
-  const billedByAssignment = getBilledHoursByAssignment_();
+  const assignmentRows =
+    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+
+  const projectsById =
+    loadPortfolioProjectsById_();
 
   const projects = {};
 
   assignmentRows.forEach(row => {
     const p = row.properties;
 
-    const contractorStatus = getText_(p['Contractor Status']);
+    const contractor =
+      getText_(p["Contractor"]) ||
+      "Unknown Contractor";
 
-    if (contractorStatus.toLowerCase() !== 'active') {
+    const projectId =
+      p["Projects 1 related to"]?.relation?.[0]?.id || "";
+
+    const project =
+      projectsById[projectId];
+
+    if (!project) {
       return;
     }
 
-    const contractor = getText_(p['Contractor']) || 'Unknown';
-    const role = getMultiSelectNames_(p['Role']).join(', ');
-    const hours = getNumber_(p['Hours in Contract']);
-    const billed = roundHours_(billedByAssignment[row.id] || 0);
-    const projectNames = getMultiSelectNames_(p['Projects']);
+    const role =
+      getMultiSelectNames_(p["Role"]).join(", ") ||
+      getText_(p["Role"]) ||
+      "Role not assigned";
 
-    projectNames.forEach(project => {
-      if (!projects[project]) {
-        projects[project] = {
-          totalHours: 0,
-          totalBilled: 0,
-          team: []
-        };
-      }
+    const contractedHours =
+      getNumber_(p["Hours to Contractor"]);
 
-      projects[project].totalHours += hours;
-      projects[project].totalBilled += billed;
+    const billedHistorical =
+      getNumber_(p["Billed Historical"]);
 
-      projects[project].team.push({
-        contractor,
-        role,
-        hours: roundHours_(hours),
-        billed
-      });
+    const billedCurrent =
+      getNumber_(p["Billed"]);
+
+    const billedTotal =
+      roundHours_(billedHistorical + billedCurrent);
+
+    const remainingHours =
+      roundHours_(contractedHours - billedTotal);
+
+    if (!projects[project.name]) {
+      projects[project.name] = {
+        projectId: project.id,
+        projectName: project.name,
+        projectStatus: project.status,
+        totalHours: 0,
+        totalBilled: 0,
+        totalRemaining: 0,
+        team: []
+      };
+    }
+
+    projects[project.name].totalHours += contractedHours;
+    projects[project.name].totalBilled += billedTotal;
+    projects[project.name].totalRemaining += remainingHours;
+
+    projects[project.name].team.push({
+      contractor,
+      role,
+      hours: roundHours_(contractedHours),
+      billedHistorical,
+      billedCurrent,
+      billed: billedTotal,
+      remaining: remainingHours
     });
   });
 
   return projects;
 }
 
+function loadPortfolioProjectsById_() {
+  const rows =
+    queryAllDataSourceRows_(PROJECTS_OVERVIEW_DATA_SOURCE_ID);
+
+  const projects = {};
+
+  rows.forEach(row => {
+    projects[row.id] = {
+      id: row.id,
+      name:
+        getText_(row.properties["Project Name"]) ||
+        "Untitled Project",
+      status:
+        getText_(row.properties["Project Status"]) ||
+        "No Status"
+    };
+  });
+
+  return projects;
+}
+
+
+/************************************
+ * PORTFOLIO WORKLOAD REPORT
+ ************************************/
+
 function buildManagementViewSections() {
-  const projects = buildManagementView();
+  const projects =
+    buildManagementView();
+
   return formatManagementReportSections_(projects);
 }
 
 function formatManagementReportSections_(projects) {
-  const noAllocation = [];
+  const needsAllocation = [];
   const under50 = [];
   const over50 = [];
   const over80 = [];
   const over100 = [];
 
-  Object.keys(projects).sort().forEach(project => {
-    const projectData = projects[project];
+  Object.keys(projects)
+    .sort()
+    .forEach(projectName => {
+      const projectData =
+        projects[projectName];
 
-    const totalHours = roundHours_(projectData.totalHours);
-    const totalBilled = roundHours_(projectData.totalBilled);
+      const totalHours =
+        roundHours_(projectData.totalHours);
 
-    const usage =
-      totalHours > 0
-        ? (totalBilled / totalHours) * 100
-        : 0;
+      const totalBilled =
+        roundHours_(projectData.totalBilled);
 
-    const teamLines = projectData.team
-      .sort((a, b) => a.contractor.localeCompare(b.contractor))
-      .map(member => {
-        const remaining = roundHours_(member.hours - member.billed);
-        return `• ${member.contractor} | ${member.role || 'Role not assigned'} | ${member.billed}/${member.hours} hrs (${remaining} left)`;
-      })
-      .join('\n');
+      const totalRemaining =
+        roundHours_(projectData.totalRemaining);
 
-    const section =
-      `🗂️ ${project}
-      📊 Usage: ${usage.toFixed(1)}% | ⏱️ ${totalBilled}/${totalHours} hrs
+      const usage =
+        totalHours > 0
+          ? (totalBilled / totalHours) * 100
+          : 0;
 
-      ${teamLines}`;
+      const teamLines =
+        projectData.team
+          .sort((a, b) =>
+            a.contractor.localeCompare(b.contractor) ||
+            a.role.localeCompare(b.role)
+          )
+          .map(member =>
+            `• ${member.contractor} | ${member.role} | ` +
+            `${member.billed}/${member.hours} hrs ` +
+            `(${member.remaining} left)`
+          )
+          .join("\n");
 
-          if (totalHours === 0) {
-            noAllocation.push(section);
-          } else if (usage > 100) {
-            over100.push(section);
-          } else if (usage >= 80) {
-            over80.push(section);
-          } else if (usage >= 50) {
-            over50.push(section);
-          } else {
-            under50.push(section);
-          }
-        });
+      const section =
+        `🗂️ *${projectName}*\n` +
+        `Status: ${projectData.projectStatus}\n` +
+        `📊 Usage: ${usage.toFixed(1)}% | ` +
+        `⏱️ ${totalBilled}/${totalHours} hrs | ` +
+        `Remaining: ${totalRemaining} hrs\n\n` +
+        `${teamLines || "_No assigned contractors._"}`;
 
-        const summary =
-      `📊 PORTFOLIO SUMMARY
+      if (totalHours === 0) {
+        needsAllocation.push(section);
+      } else if (usage > 100) {
+        over100.push(section);
+      } else if (usage >= 80) {
+        over80.push(section);
+      } else if (usage >= 50) {
+        over50.push(section);
+      } else {
+        under50.push(section);
+      }
+    });
 
-      ⚫ Needs Allocation: ${noAllocation.length}
-      🟢 Less than 50%: ${under50.length}
-      🟡 More than 50%: ${over50.length}
-      🔴 Almost Completed: ${over80.length}
-      🚨 Overused: ${over100.length}`;
+  const summary =
+    "📊 *Portfolio Overview*\n\n" +
+    `⚫ Needs Allocation: ${needsAllocation.length}\n` +
+    `🟢 Less than 50%: ${under50.length}\n` +
+    `🟡 More than 50%: ${over50.length}\n` +
+    `🔴 Almost Completed: ${over80.length}\n` +
+    `🚨 Overused: ${over100.length}`;
 
-          return {
-          summary,
-          noAllocation,
-          under50,
-          over50,
-          over80,
-          over100
-        };
+  return {
+    summary,
+    needsAllocation,
+    under50,
+    over50,
+    over80,
+    over100
+  };
 }
