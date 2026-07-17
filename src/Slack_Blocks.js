@@ -90,12 +90,7 @@ function buildAdminMenuBlocks_() {
       elements: [
         button_("📊 Portfolio Overview", "ops_workload"),
         button_("📁 Projects", "admin_projects_menu"),
-        button_("👥 Contractors", "admin_contractors_menu")
-      ]
-    },
-    {
-      type: "actions",
-      elements: [
+        button_("👥 Contractors", "admin_contractors_menu"),
         button_("💵 Invoices", "admin_invoices_menu"),
         button_("📄 Signature Summary", "signature_summary")
       ]
@@ -122,13 +117,13 @@ function buildAdminProjectsMenuBlocks_() {
       type: "actions",
       elements: [
         button_("📋 Projects Overview", "projects_overview"),
-        button_("➕ New Project", "project_new"),
         button_("🏢 New Client", "client_new")
       ]
     },
     {
       type: "actions",
       elements: [
+        button_("➕ New Project", "project_new"),
         button_("👥 Add Roles", "existing_project_add_roles"),
         button_("👷 Assign Contractors", "existing_project_assign_contractors")
       ]
