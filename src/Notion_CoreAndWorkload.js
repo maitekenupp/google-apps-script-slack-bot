@@ -199,10 +199,26 @@ function roundHours_(value) {
 
 
 /************************************
- * PORTFOLIO WORKLOAD DATA
+ * PORTFOLIO ACTION DATA
  ************************************/
 
-function buildManagementView() {
+function buildPortfolioActionView_() {
+  const projects =
+    buildPortfolioProjects_();
+
+  return groupPortfolioProjectsByAction_(projects);
+}
+
+function getPortfolioProjectDetails_(projectId) {
+  const projects =
+    buildPortfolioProjects_();
+
+  return projects.find(project =>
+    project.projectId === projectId
+  ) || null;
+}
+
+function buildPortfolioProjects_() {
   const assignmentRows =
     queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
 
@@ -228,6 +244,13 @@ function buildManagementView() {
       return;
     }
 
+    if (
+      project.status === "Done" ||
+      project.status === "Canceled"
+    ) {
+      return;
+    }
+
     const role =
       getMultiSelectNames_(p["Role"]).join(", ") ||
       getText_(p["Role"]) ||
@@ -248,23 +271,31 @@ function buildManagementView() {
     const remainingHours =
       roundHours_(contractedHours - billedTotal);
 
-    if (!projects[project.name]) {
-      projects[project.name] = {
+    if (!projects[projectId]) {
+      projects[projectId] = {
         projectId: project.id,
         projectName: project.name,
         projectStatus: project.status,
+        startDate: project.startDate,
+        endDate: project.endDate,
+        hasSowFile: project.hasSowFile,
+        startDateDisplay: formatPortfolioDate_(project.startDate),
+        endDateDisplay: formatPortfolioDate_(project.endDate),
+        daysUntilEnd: getPortfolioDaysUntil_(project.endDate),
         totalHours: 0,
         totalBilled: 0,
         totalRemaining: 0,
+        usage: 0,
+        risks: [],
         team: []
       };
     }
 
-    projects[project.name].totalHours += contractedHours;
-    projects[project.name].totalBilled += billedTotal;
-    projects[project.name].totalRemaining += remainingHours;
+    projects[projectId].totalHours += contractedHours;
+    projects[projectId].totalBilled += billedTotal;
+    projects[projectId].totalRemaining += remainingHours;
 
-    projects[project.name].team.push({
+    projects[projectId].team.push({
       contractor,
       role,
       hours: roundHours_(contractedHours),
@@ -275,7 +306,33 @@ function buildManagementView() {
     });
   });
 
-  return projects;
+  Object.keys(projects).forEach(projectId => {
+    const project =
+      projects[projectId];
+
+    project.totalHours =
+      roundHours_(project.totalHours);
+
+    project.totalBilled =
+      roundHours_(project.totalBilled);
+
+    project.totalRemaining =
+      roundHours_(project.totalRemaining);
+
+    project.usage =
+      project.totalHours > 0
+        ? (project.totalBilled / project.totalHours) * 100
+        : 0;
+
+    project.risks =
+      buildPortfolioProjectRisks_(project);
+  });
+
+  return Object.keys(projects)
+    .map(projectId => projects[projectId])
+    .sort((a, b) =>
+      a.projectName.localeCompare(b.projectName)
+    );
 }
 
 function loadPortfolioProjectsById_() {
@@ -285,14 +342,22 @@ function loadPortfolioProjectsById_() {
   const projects = {};
 
   rows.forEach(row => {
+    const p = row.properties;
+
     projects[row.id] = {
       id: row.id,
       name:
-        getText_(row.properties["Project Name"]) ||
+        getText_(p["Project Name"]) ||
         "Untitled Project",
       status:
-        getText_(row.properties["Project Status"]) ||
-        "No Status"
+        getText_(p["Project Status"]) ||
+        "No Status",
+      startDate:
+        p["Project Start Date"]?.date?.start || "",
+      endDate:
+        p["Project End Date"]?.date?.start || "",
+      hasSowFile:
+        Boolean(p["SOW File"]?.files?.length)
     };
   });
 
@@ -301,14 +366,197 @@ function loadPortfolioProjectsById_() {
 
 
 /************************************
- * PORTFOLIO WORKLOAD REPORT
+ * PORTFOLIO ACTION GROUPING
  ************************************/
 
-function buildManagementViewSections() {
-  const projects =
-    buildManagementView();
+function groupPortfolioProjectsByAction_(projects) {
+  const report = {
+    needsAttention: [],
+    watchThisWeek: [],
+    onTrack: [],
+    finalBilling: [],
+    pipeline: []
+  };
 
-  return formatManagementReportSections_(projects);
+  projects.forEach(project => {
+    const category =
+      getPortfolioProjectActionCategory_(project);
+
+    report[category].push(project);
+  });
+
+  Object.keys(report).forEach(key => {
+    report[key].sort(sortPortfolioProjectsByUrgency_);
+  });
+
+  return report;
+}
+
+function getPortfolioProjectActionCategory_(project) {
+  const status =
+    project.projectStatus;
+
+  if (status === "Internal") {
+    return "onTrack";
+  }
+
+  if (status === "Final Billing") {
+    return "finalBilling";
+  }
+
+  if (
+    status === "Quotation" ||
+    status === "Not Started"
+  ) {
+    return "pipeline";
+  }
+
+  if (
+    status === "Paused" ||
+    status === "For Review" ||
+    project.usage > 100 ||
+    project.daysUntilEnd < 0 ||
+    project.daysUntilEnd === null ||
+    !project.hasSowFile ||
+    project.totalHours <= 0
+  ) {
+    return "needsAttention";
+  }
+
+  if (
+    project.usage >= 70 ||
+    (
+      project.daysUntilEnd !== null &&
+      project.daysUntilEnd <= 7
+    )
+  ) {
+    return "watchThisWeek";
+  }
+
+  return "onTrack";
+}
+
+function sortPortfolioProjectsByUrgency_(a, b) {
+  const endA =
+    a.daysUntilEnd === null ? 9999 : a.daysUntilEnd;
+
+  const endB =
+    b.daysUntilEnd === null ? 9999 : b.daysUntilEnd;
+
+  if (endA !== endB) {
+    return endA - endB;
+  }
+
+  return b.usage - a.usage;
+}
+
+
+/************************************
+ * PORTFOLIO RISKS
+ ************************************/
+
+function buildPortfolioProjectRisks_(project) {
+  if (project.projectStatus === "Internal") {
+    return [];
+  }
+  
+  const risks = [];
+
+  if (project.projectStatus === "Paused") {
+    risks.push("Paused");
+  }
+
+  if (project.projectStatus === "For Review") {
+    risks.push("For review");
+  }
+
+  if (project.totalHours <= 0) {
+    risks.push("No contractor hours assigned");
+  }
+
+  if (project.usage > 100) {
+    risks.push("Overused");
+  }
+
+  if (!project.hasSowFile) {
+    risks.push("Missing SOW file");
+  }
+
+  if (project.daysUntilEnd !== null) {
+    if (project.daysUntilEnd < 0) {
+      risks.push("Past end date");
+    } 
+  } else {
+    risks.push("No end date");
+  }
+
+  return risks;
+}
+
+
+/************************************
+ * PORTFOLIO DATE HELPERS
+ ************************************/
+
+function getPortfolioDaysUntil_(dateString) {
+  if (!dateString) {
+    return null;
+  }
+
+  const timezone =
+    "America/Los_Angeles";
+
+  const todayText =
+    Utilities.formatDate(
+      new Date(),
+      timezone,
+      "yyyy-MM-dd"
+    );
+
+  const today =
+    new Date(`${todayText}T00:00:00`);
+
+  const target =
+    new Date(`${dateString}T00:00:00`);
+
+  return Math.ceil(
+    (target.getTime() - today.getTime()) /
+    (1000 * 60 * 60 * 24)
+  );
+}
+
+function formatPortfolioDate_(dateString) {
+  if (!dateString) {
+    return "";
+  }
+
+  return Utilities.formatDate(
+    new Date(`${dateString}T00:00:00`),
+    "America/Los_Angeles",
+    "MMM d, yyyy"
+  );
+}
+
+
+/************************************
+ * LEGACY COMPATIBILITY
+ ************************************/
+
+function buildManagementView() {
+  const projects =
+    buildPortfolioProjects_();
+
+  const result = {};
+
+  projects.forEach(project => {
+    result[project.projectName] = project;
+  });
+
+  return result;
+}
+
+function buildManagementViewSections() {
+  return buildPortfolioActionView_();
 }
 
 function formatManagementReportSections_(projects) {

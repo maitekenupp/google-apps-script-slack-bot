@@ -207,6 +207,14 @@ function routeAdminMenuAction_(actionId, payload, context) {
     return true;
   }
 
+  if (actionId === "contractor_workload_details") {
+    openContractorWorkloadDetailsModal_(
+      payload,
+      context.userId
+    );
+    return true;
+  }
+
   if (actionId === "signature_summary") {
     showSignatureSummary_(
       context.channelId,
@@ -224,11 +232,10 @@ function routeAdminMenuAction_(actionId, payload, context) {
   }
 
   if (actionId === "extension_admin_menu") {
-    updateIzaMenu(
+    handleExtensionAdminMenu_(
       context.channelId,
       context.messageTs,
-      buildComingSoonBlocks_("⏱️ Extension Requests", "admin_contractors_menu"),
-      "Extension Requests"
+      context.userId
     );
     return true;
   }
@@ -253,11 +260,18 @@ function routeOperationsAction_(actionId, payload, context) {
   }
 
   if (actionId === "my_workload") {
-    updateIzaMenu(
+    handleMyWorkloadButton_(
       context.channelId,
       context.messageTs,
-      buildComingSoonBlocks_("👤 My Workload", "menu_operations"),
-      "My Workload"
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "my_workload_details") {
+    openMyWorkloadDetailsModal_(
+      payload,
+      context.userId
     );
     return true;
   }
@@ -322,6 +336,64 @@ function routeProjectStatusAction_(actionId, payload, context) {
     handleProjectStatusCancel_(
       context.channelId,
       context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "portfolio_needs_attention") {
+    handlePortfolioCategoryButton_(
+      context.channelId,
+      context.messageTs,
+      "needsAttention",
+      "🚨 Needs Attention"
+    );
+    return true;
+  }
+
+  if (actionId === "portfolio_watch_this_week") {
+    handlePortfolioCategoryButton_(
+      context.channelId,
+      context.messageTs,
+      "watchThisWeek",
+      "🟡 Watch This Week"
+    );
+    return true;
+  }
+
+  if (actionId === "portfolio_on_track") {
+    handlePortfolioCategoryButton_(
+      context.channelId,
+      context.messageTs,
+      "onTrack",
+      "🟢 On Track"
+    );
+    return true;
+  }
+
+  if (actionId === "portfolio_final_billing") {
+    handlePortfolioCategoryButton_(
+      context.channelId,
+      context.messageTs,
+      "finalBilling",
+      "🟣 Final Billing"
+    );
+    return true;
+  }
+
+  if (actionId === "portfolio_pipeline") {
+    handlePortfolioCategoryButton_(
+      context.channelId,
+      context.messageTs,
+      "pipeline",
+      "⚪ Pipeline"
+    );
+    return true;
+  }
+
+  if (actionId === "portfolio_project_details") {
+    openPortfolioProjectDetailsModal_(
+      payload,
       context.userId
     );
     return true;
@@ -855,6 +927,16 @@ function routeClientAction_(actionId, payload, context) {
  ************************************/
 
 function routeExtensionAction_(actionId, payload, context) {
+  if (actionId === "extension_admin_view_request") {
+    handleExtensionAdminViewRequest_(
+      context.channelId,
+      context.messageTs,
+      context.userId,
+      context.actionValue
+    );
+    return true;
+  }
+
   if (actionId === "extension_start") {
     handleExtensionStart_(
       context.channelId,

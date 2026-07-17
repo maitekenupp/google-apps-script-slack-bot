@@ -51,6 +51,8 @@ function formatProjectsOverviewReport_(groups) {
     "Paused",
     "In progress",
     "For Review",
+    "Final Billing",
+    "Internal",
     "No Status"
   ];
 
@@ -60,6 +62,8 @@ function formatProjectsOverviewReport_(groups) {
     "Paused": "⏸️",
     "In progress": "🟢",
     "For Review": "🟡",
+    "Final Billing": "🟣",
+    "Internal": "🔵",
     "No Status": "❓"
   };
 

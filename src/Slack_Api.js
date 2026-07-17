@@ -118,6 +118,13 @@ function openSlackModal_(triggerId, view) {
   });
 }
 
+function updateSlackModal_(viewId, view) {
+  return callSlackApi_("views.update", {
+    view_id: viewId,
+    view: view
+  });
+}
+
 
 /************************************
  * MAIN MENU MESSAGE

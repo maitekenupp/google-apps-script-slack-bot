@@ -17,12 +17,12 @@ function handleWorkloadReportButton_(channelId, messageTs, userId) {
   );
 
   const report =
-    buildManagementViewSections();
+    buildPortfolioActionView_();
 
   updateIzaMenu(
     channelId,
     messageTs,
-    buildWorkloadSummaryBlocks_(report),
+    buildPortfolioActionSummaryBlocks_(report),
     "Portfolio Overview"
   );
 }
@@ -35,34 +35,35 @@ function buildWorkloadLoadingBlocks_() {
         type: "mrkdwn",
         text:
           "📊 *Portfolio Overview*\n\n" +
-          "Reviewing project assignments, billed hours, and remaining hours..."
+          "Reviewing project status, end dates, billed hours, and remaining hours..."
       }
     }
   ];
 }
 
-function buildWorkloadSummaryBlocks_(report) {
+function buildPortfolioActionSummaryBlocks_(report) {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: report.summary
+        text:
+          "📊 *Portfolio Overview*\n\n" +
+          `🚨 *Needs Attention:* ${report.needsAttention.length}\n` +
+          `🟡 *Watch This Week:* ${report.watchThisWeek.length}\n` +
+          `🟢 *On Track:* ${report.onTrack.length}\n` +
+          `🟣 *Final Billing:* ${report.finalBilling.length}\n` +
+          `⚪ *Pipeline:* ${report.pipeline.length}`
       }
     },
     {
       type: "actions",
       elements: [
-        button_("⚫ Needs Allocation", "workload_needs_allocation"),
-        button_("🟢 Less than 50%", "workload_under_50"),
-        button_("🟡 More than 50%", "workload_over_50")
-      ]
-    },
-    {
-      type: "actions",
-      elements: [
-        button_("🔴 Almost Completed", "workload_over_80"),
-        button_("🚨 Overused", "workload_over_100")
+        button_("🚨 Needs Attention", "portfolio_needs_attention"),
+        button_("🟡 Watch This Week", "portfolio_watch_this_week"),
+        button_("🟢 On Track", "portfolio_on_track"),
+        button_("🟣 Final Billing", "portfolio_final_billing"),
+        button_("⚪ Pipeline", "portfolio_pipeline")
       ]
     },
     {
@@ -76,48 +77,276 @@ function buildWorkloadSummaryBlocks_(report) {
 
 
 /************************************
- * PORTFOLIO CATEGORY DETAIL
+ * PORTFOLIO CATEGORY LIST
  ************************************/
 
-function handleWorkloadCategoryButton_(channelId, messageTs, categoryKey, title) {
+function handlePortfolioCategoryButton_(channelId, messageTs, categoryKey, title) {
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildPortfolioCategoryLoadingBlocks_(title),
+    title
+  );
+
   const report =
-    buildManagementViewSections();
+    buildPortfolioActionView_();
 
   const items =
     report[categoryKey] || [];
 
-  const text =
-    `*${title}*\n\n` +
-    (items.length ? items.join("\n\n") : "None");
-
   updateIzaMenu(
     channelId,
     messageTs,
-    buildWorkloadCategoryBlocks_(text),
+    buildPortfolioCategoryBlocks_(title, categoryKey, items),
     title
   );
 }
 
-function buildWorkloadCategoryBlocks_(text) {
-  const safeText =
-    text.length > 2900
-      ? text.substring(0, 2900) + "\n\n_Report shortened for Slack._"
-      : text;
-
+function buildPortfolioCategoryLoadingBlocks_(title) {
   return [
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: safeText
+        text:
+          `*${title}*\n\n` +
+          "Loading projects..."
       }
-    },
-    {
-      type: "actions",
-      elements: [
-        button_("⬅️ Back to Summary", "ops_workload"),
-        button_("🛠️ Admin", "admin_menu")
-      ]
     }
   ];
+}
+
+function buildPortfolioCategoryBlocks_(title, categoryKey, items) {
+  const blocks = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `*${title}* (${items.length})\n\n` +
+          (
+            items.length
+              ? "Review the projects below."
+              : "No projects in this category right now."
+          )
+      }
+    }
+  ];
+
+  items.slice(0, 20).forEach(project => {
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: buildPortfolioProjectSummaryText_(project)
+      },
+      accessory: {
+        type: "button",
+        text: {
+          type: "plain_text",
+          text: "Details",
+          emoji: true
+        },
+        action_id: "portfolio_project_details",
+        value: project.projectId
+      }
+    });
+  });
+
+  if (items.length > 20) {
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `_Showing the first 20 projects. ${items.length - 20} more are in this category._`
+      }
+    });
+  }
+
+  blocks.push({
+    type: "actions",
+    elements: [
+      button_("⬅️ Back to Portfolio", "ops_workload")
+    ]
+  });
+
+  return blocks;
+}
+
+function buildPortfolioProjectSummaryText_(project) {
+  const endDateText =
+    project.endDateDisplay || "No end date";
+
+  const riskText =
+    project.risks && project.risks.length
+      ? `\nRisk: ${project.risks.join(", ")}`
+      : "";
+
+  return (
+    `*${project.projectName}*\n` +
+    `${project.projectStatus} | Ends ${endDateText} | ` +
+    `${project.usage.toFixed(1)}% used | ` +
+    `${project.totalRemaining} hrs left` +
+    riskText
+  );
+}
+
+
+/************************************
+ * PROJECT DETAILS MODAL
+ ************************************/
+
+function openPortfolioProjectDetailsModal_(payload, userId) {
+  const projectId =
+    payload.actions[0].value;
+
+  const triggerId =
+    payload.trigger_id;
+
+  const loadingView =
+    buildPortfolioProjectDetailsLoadingModalView_();
+
+  const opened =
+    openSlackModal_(triggerId, loadingView);
+
+  const viewId =
+    opened.view?.id;
+
+  if (!viewId) {
+    return;
+  }
+
+  const project =
+    getPortfolioProjectDetails_(projectId);
+
+  const finalView =
+    project
+      ? buildPortfolioProjectDetailsModalView_(project)
+      : buildPortfolioProjectDetailsNotFoundModalView_();
+
+  updateSlackModal_(viewId, finalView);
+}
+
+function buildPortfolioProjectDetailsLoadingModalView_() {
+  return {
+    type: "modal",
+    title: {
+      type: "plain_text",
+      text: "Project Details",
+      emoji: true
+    },
+    close: {
+      type: "plain_text",
+      text: "Close",
+      emoji: true
+    },
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "*Project Details*\n\n" +
+            "Loading project information..."
+        }
+      }
+    ]
+  };
+}
+
+function buildPortfolioProjectDetailsNotFoundModalView_() {
+  return {
+    type: "modal",
+    title: {
+      type: "plain_text",
+      text: "Project Details",
+      emoji: true
+    },
+    close: {
+      type: "plain_text",
+      text: "Close",
+      emoji: true
+    },
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "I could not find this project."
+        }
+      }
+    ]
+  };
+}
+
+function buildPortfolioProjectDetailsModalView_(project) {
+  const teamText =
+    project.team.length
+      ? project.team
+          .map(member =>
+            `• ${member.contractor} — ${member.role} — ` +
+            `${member.billed}/${member.hours} hrs ` +
+            `(${member.remaining} left)`
+          )
+          .join("\n")
+      : "_No assigned contractors._";
+
+  const risksText =
+    project.risks.length
+      ? project.risks.map(risk => `• ${risk}`).join("\n")
+      : "_No current risk flags._";
+
+  return {
+    type: "modal",
+    title: {
+      type: "plain_text",
+      text: "Project Details",
+      emoji: true
+    },
+    close: {
+      type: "plain_text",
+      text: "Close",
+      emoji: true
+    },
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            `*${project.projectName}*\n\n` +
+            `*Status:* ${project.projectStatus}\n` +
+            `*Dates:* ${project.startDateDisplay || "-"} - ${project.endDateDisplay || "-"}\n` +
+            `*Usage:* ${project.usage.toFixed(1)}%\n` +
+            `*Hours:* ${project.totalBilled}/${project.totalHours} used\n` +
+            `*Remaining:* ${project.totalRemaining} hrs`
+        }
+      },
+      {
+        type: "divider"
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "*Team:*\n" +
+            teamText
+        }
+      },
+      {
+        type: "divider"
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            "*Risks:*\n" +
+            risksText
+        }
+      }
+    ]
+  };
 }

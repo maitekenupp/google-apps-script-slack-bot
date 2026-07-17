@@ -20,6 +20,8 @@ const PROJECT_STATUS_UPDATE_OPTIONS = [
   "Paused",
   "In progress",
   "For Review",
+  "Final Billing",
+  "Internal",
   "Canceled",
   "Done"
 ];

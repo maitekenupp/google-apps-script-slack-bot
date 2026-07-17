@@ -321,10 +321,10 @@ function buildInvoiceAssignmentSelectBlocks_(session) {
             "💵 *Submit Invoice*\n\n" +
             `*Contractor:* ${session.contractor.name}\n\n` +
             `*Selected:* ${selected.projectName} - ${selected.role}\n` +
-            `Contracted: ${selected.hours} hrs\n` +
+            `Contracted: ${invoiceAssignmentContractedText_(selected)}\n` +
             `Previously billed: ${selected.billedHistorical || 0} hrs\n` +
             `Current system billed: ${selected.billedHours || 0} hrs\n` +
-            `Remaining: ${selected.remainingHours} hrs\n` +
+            `Remaining: ${invoiceAssignmentRemainingText_(selected)}\n` +
             `Rate: ${invoiceFormatMoney_(selected.rate)}/hr`
         }
       },
@@ -542,7 +542,7 @@ function handleInvoiceLineModalSubmission_(payload) {
     };
   }
 
-  if (hours > assignment.remainingHours) {
+  if (!assignment.isInternalNoHours && hours > assignment.remainingHours) {
     return {
       response_action: "errors",
       errors: {
@@ -566,6 +566,7 @@ function handleInvoiceLineModalSubmission_(payload) {
     billedHours: assignment.billedHours,
     billedTotal: assignment.billedTotal,
     remainingHours: assignment.remainingHours,
+    isInternalNoHours: assignment.isInternalNoHours,
     rate: assignment.rate,
     description,
     total: hours * assignment.rate
@@ -1059,7 +1060,14 @@ function loadInvoiceAssignmentsForContractor_(contractorName) {
 
       const project = projectDataById[projectId];
 
-      if (!project || project.status.toLowerCase() !== "in progress") {
+      if (
+        !project ||
+        ![
+          "in progress",
+          "final billing",
+          "internal"
+        ].includes(project.status.toLowerCase())
+      ) {
         return null;
       }
 
@@ -1073,10 +1081,14 @@ function loadInvoiceAssignmentsForContractor_(contractorName) {
       const billed = getNumber_(p["Billed"]);
       const billedTotal = billedHistorical + billed;
 
+      const isInternalNoHours =
+        project.status === "Internal" &&
+        contractedHours <= 0;
+
       const remainingHours =
-        contractedHours > 0
-          ? contractedHours - billedTotal
-          : 0;
+        isInternalNoHours
+          ? 0
+          : contractedHours - billedTotal;
 
       return {
         id: row.id,
@@ -1090,13 +1102,17 @@ function loadInvoiceAssignmentsForContractor_(contractorName) {
         billedHours: billed,
         billedTotal,
         remainingHours,
+        isInternalNoHours,
         rate: getNumber_(p["Rate per Hour"])
       };
     })
     .filter(item =>
       item &&
       item.projectId &&
-      item.remainingHours > 0
+      (
+        item.isInternalNoHours ||
+        item.remainingHours > 0
+      )
     )
     .sort((a, b) =>
       a.projectName.localeCompare(b.projectName) ||
@@ -1173,14 +1189,26 @@ function buildInvoiceLineItemsSummaryText_(items) {
     .map(item =>
       `*${item.projectName} - ${item.role}*\n` +
       `Hours this invoice: ${item.hours}\n` +
-      `Contracted: ${item.contractedHours} hrs\n` +
+      `Contracted: ${invoiceAssignmentContractedText_(item)}\n` +
       `Previously billed: ${item.billedHistorical || 0} hrs\n` +
       `Current system billed: ${item.billedHours || 0} hrs\n` +
-      `Remaining before this invoice: ${item.remainingHours} hrs\n` +
+      `Remaining before this invoice: ${invoiceAssignmentRemainingText_(item)}\n` +
       `Rate: ${invoiceFormatMoney_(item.rate)}/hr\n` +
       `Total: ${invoiceFormatMoney_(item.total)}`
     )
     .join("\n\n");
+}
+
+function invoiceAssignmentContractedText_(item) {
+  return item.isInternalNoHours
+    ? "-"
+    : `${item.contractedHours || item.hours || 0} hrs`;
+}
+
+function invoiceAssignmentRemainingText_(item) {
+  return item.isInternalNoHours
+    ? "-"
+    : `${item.remainingHours || 0} hrs`;
 }
 
 function invoiceLineItemsTotal_(items) {
@@ -1205,21 +1233,24 @@ function invoiceFormatMoney_(value) {
 }
 
 function invoiceLastDayOfCurrentMonth_() {
+  const timezone = "America/Los_Angeles";
+
   const now = new Date();
 
   const year = Number(
-    Utilities.formatDate(now, "America/Los_Angeles", "yyyy")
+    Utilities.formatDate(now, timezone, "yyyy")
   );
 
   const month = Number(
-    Utilities.formatDate(now, "America/Los_Angeles", "M")
+    Utilities.formatDate(now, timezone, "M")
   );
 
-  const lastDay = new Date(Date.UTC(year, month, 0, 12, 0, 0));
+  const lastDayOfPreviousMonth =
+    new Date(year, month - 1, 0);
 
   return Utilities.formatDate(
-    lastDay,
-    "UTC",
+    lastDayOfPreviousMonth,
+    timezone,
     "yyyy-MM-dd"
   );
 }

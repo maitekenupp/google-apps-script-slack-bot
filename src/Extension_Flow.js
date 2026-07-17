@@ -633,6 +633,310 @@ function buildExtensionSubmittedBlocks_(assignment, requestedHours) {
   ];
 }
 
+/************************************
+ * ADMIN REQUESTS MENU
+ ************************************/
+
+function handleExtensionAdminMenu_(channelId, messageTs, userId) {
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildExtensionAdminLoadingBlocks_(),
+    "Loading Extension Requests"
+  );
+
+  const requests = loadPendingExtensionRequests_();
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildExtensionAdminSummaryBlocks_(requests),
+    "Extension Requests"
+  );
+}
+
+function buildExtensionAdminLoadingBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "*Extension Requests*\n\n" +
+          "Loading pending requests..."
+      }
+    }
+  ];
+}
+
+function loadPendingExtensionRequests_() {
+  const rows =
+    queryAllDataSourceRows_(CONTRACTOR_EXTENSION_REQUESTS_DATA_SOURCE_ID);
+
+  return rows
+    .map(row => {
+      const p = row.properties;
+      const status = getText_(p["Status"]) || "";
+
+      return {
+        id: row.id,
+        status,
+        contractorName:
+          getText_(p["Contractor Name"]) ||
+          getRelationDisplayName_(p["Contractor"]) ||
+          "Contractor",
+        projectName:
+          getText_(p["Project Name"]) ||
+          getRelationDisplayName_(p["Project"]) ||
+          "Project",
+        role:
+          getText_(p["Role"]) || "Role",
+        requestedHours:
+          getNumber_(p["Requested Extra Hours"]),
+        requestedDate:
+          p["Requested Date"]?.date?.start || ""
+      };
+    })
+    .filter(request => request.status === "Pending")
+    .sort((a, b) =>
+      `${a.requestedDate} ${a.projectName} ${a.role}`.localeCompare(
+        `${b.requestedDate} ${b.projectName} ${b.role}`
+      )
+    );
+}
+
+function buildExtensionAdminSummaryBlocks_(requests) {
+  const blocks = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "*Extension Requests*\n\n" +
+          `*Pending requests (${requests.length})*`
+      }
+    }
+  ];
+
+  if (!requests.length) {
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "No pending extension requests right now."
+      }
+    });
+  }
+
+  requests.slice(0, 20).forEach(request => {
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `*${request.contractorName}*\n` +
+          `${request.projectName} / ${request.role}\n` +
+          `Requested: ${request.requestedHours} hrs | ` +
+          `Date: ${extensionFormatDate_(request.requestedDate)}`
+      },
+      accessory: {
+        type: "button",
+        text: {
+          type: "plain_text",
+          text: "View Request",
+          emoji: true
+        },
+        action_id: "extension_admin_view_request",
+        value: request.id
+      }
+    });
+  });
+
+  blocks.push({
+    type: "actions",
+    elements: [
+      button_("Back", "admin_contractors_menu")
+    ]
+  });
+
+  return blocks;
+}
+
+function handleExtensionAdminViewRequest_(channelId, messageTs, userId, requestId) {
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildExtensionAdminLoadingBlocks_(),
+    "Loading Extension Request"
+  );
+
+  const request =
+    getExtensionAdminRequestDetails_(requestId);
+
+  if (!request) {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildExtensionAdminRequestNotFoundBlocks_(),
+      "Extension Request Not Found"
+    );
+    return;
+  }
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildExtensionAdminRequestBlocks_(request),
+    "Extension Request"
+  );
+}
+
+function buildExtensionAdminRequestNotFoundBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "*Extension Request*\n\n" +
+          "I could not find this request. It may have been deleted or changed."
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("Back", "extension_admin_menu")
+      ]
+    }
+  ];
+}
+
+function getExtensionAdminRequestDetails_(requestId) {
+  const page =
+    notionFetch_(
+      `https://api.notion.com/v1/pages/${requestId}`,
+      "get"
+    );
+
+  if (!page || !page.id) {
+    return null;
+  }
+
+  const p = page.properties;
+
+  const contractorId =
+    p["Contractor"]?.relation?.[0]?.id || "";
+
+  const projectId =
+    p["Project"]?.relation?.[0]?.id || "";
+
+  const assignmentId =
+    p["Assignment"]?.relation?.[0]?.id || "";
+
+  const contractor =
+    getExtensionContractorDetails_(contractorId);
+
+  return {
+    requestId: page.id,
+    assignmentId,
+    contractorId,
+    contractorName:
+      getText_(p["Contractor Name"]) ||
+      contractor.name ||
+      getRelationDisplayName_(p["Contractor"]) ||
+      "Contractor",
+    contractorSlackId:
+      contractor.slackId || "",
+    projectId,
+    projectName:
+      getText_(p["Project Name"]) ||
+      getRelationDisplayName_(p["Project"]) ||
+      "Project",
+    role:
+      getText_(p["Role"]) || "Role",
+    status:
+      getText_(p["Status"]) || "",
+    currentHours:
+      getNumber_(p["Current Contracted Hours"]),
+    billedHours:
+      getNumber_(p["Billed Hours"]),
+    remainingHours:
+      getNumber_(p["Remaining Hours"]),
+    requestedHours:
+      getNumber_(p["Requested Extra Hours"]),
+    requestedDate:
+      p["Requested Date"]?.date?.start || "",
+    reason:
+      getText_(p["Reason"])
+  };
+}
+
+function buildExtensionAdminRequestBlocks_(request) {
+  const newTotal =
+    Number(request.currentHours || 0) +
+    Number(request.requestedHours || 0);
+
+  const blocks = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "*Extension Request*\n\n" +
+          `*Contractor:* ${request.contractorName}\n` +
+          `*Project:* ${request.projectName}\n` +
+          `*Role:* ${request.role}\n\n` +
+          `*Current contracted hours:* ${request.currentHours}\n` +
+          `*Already billed:* ${request.billedHours}\n` +
+          `*Remaining hours:* ${request.remainingHours}\n` +
+          `*Requested extra hours:* ${request.requestedHours}\n` +
+          `*New total if approved:* ${newTotal}\n` +
+          `*Requested date:* ${extensionFormatDate_(request.requestedDate)}\n\n` +
+          "*Reason:*\n" +
+          `${request.reason || "-"}`
+      }
+    }
+  ];
+
+  if (request.status === "Pending") {
+    blocks.push({
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "Approve",
+            emoji: true
+          },
+          style: "primary",
+          action_id: "extension_approve",
+          value: JSON.stringify(request)
+        },
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "Deny",
+            emoji: true
+          },
+          style: "danger",
+          action_id: "extension_deny",
+          value: JSON.stringify(request)
+        }
+      ]
+    });
+  }
+
+  blocks.push({
+    type: "actions",
+    elements: [
+      button_("Back to Requests", "extension_admin_menu")
+    ]
+  });
+
+  return blocks;
+}
 
 /************************************
  * CREATE REQUEST IN NOTION
