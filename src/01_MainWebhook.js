@@ -40,6 +40,15 @@ function doPost(e) {
 
     const data = JSON.parse(rawBody);
 
+    if (data.type === "finance_summary_refresh") {
+      const result =
+        handleFinanceSummaryWebhook_(data);
+
+      return ContentService
+        .createTextOutput(JSON.stringify(result))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (data.type === "url_verification") {
       return ContentService.createTextOutput(data.challenge);
     }

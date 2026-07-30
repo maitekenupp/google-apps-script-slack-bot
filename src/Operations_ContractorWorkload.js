@@ -125,7 +125,9 @@ function buildContractorWorkloadData_() {
       };
     }
 
-    if (!isInternalNoHours) {
+    if (isInternalNoHours) {
+      contractors[contractorName].totalBilled += billedTotal;
+    } else {
       contractors[contractorName].totalContracted += contractedHours;
       contractors[contractorName].totalBilled += billedTotal;
       contractors[contractorName].totalRemaining += remainingHours;
@@ -143,7 +145,6 @@ function buildContractorWorkloadData_() {
       contractors[contractorName].statusGroups[displayStatus][project.name] = {
         projectName: project.name,
         status: displayStatus,
-        originalStatus: project.status,
         contractedHours: 0,
         billedTotal: 0,
         remainingHours: 0,
@@ -154,12 +155,12 @@ function buildContractorWorkloadData_() {
     const projectSummary =
       contractors[contractorName].statusGroups[displayStatus][project.name];
 
-    if (!isInternalNoHours) {
+    if (isInternalNoHours) {
+      projectSummary.billedTotal += billedTotal;
+    } else {
       projectSummary.contractedHours += contractedHours;
       projectSummary.billedTotal += billedTotal;
       projectSummary.remainingHours += remainingHours;
-    } else {
-      projectSummary.billedTotal += billedTotal;
     }
 
     projectSummary.roles.push({
@@ -409,10 +410,25 @@ function buildContractorWorkloadDetailsModalBlocks_(contractor) {
   const totalRemaining =
     roundHours_(contractor.totalRemaining);
 
-  const utilization =
-    totalContracted > 0
-      ? (totalBilled / totalContracted) * 100
-      : 0;
+  const hasOpenEndedInternalHours =
+    contractorHasOpenEndedInternalHours_(contractor);
+
+  const usedText =
+    hasOpenEndedInternalHours && totalContracted <= 0
+      ? `${totalBilled}/- hrs`
+      : `${totalBilled}/${totalContracted} hrs`;
+
+  const remainingText =
+    hasOpenEndedInternalHours && totalContracted <= 0
+      ? "-"
+      : totalRemaining;
+
+  const utilizationText =
+    hasOpenEndedInternalHours && totalContracted <= 0
+      ? "-"
+      : totalContracted > 0
+        ? `${((totalBilled / totalContracted) * 100).toFixed(1)}%`
+        : "0.0%";
 
   blocks.push({
     type: "section",
@@ -420,9 +436,9 @@ function buildContractorWorkloadDetailsModalBlocks_(contractor) {
       type: "mrkdwn",
       text:
         `👷 *${contractor.contractorName}*\n` +
-        `Used: ${totalBilled}/${totalContracted} hrs | ` +
-        `Remaining: ${totalRemaining} | ` +
-        `Utilization: ${utilization.toFixed(1)}%`
+        `Used: ${usedText} | ` +
+        `Remaining: ${remainingText} | ` +
+        `Utilization: ${utilizationText}`
     }
   });
 
@@ -463,6 +479,26 @@ function buildContractorWorkloadDetailsModalBlocks_(contractor) {
   });
 
   return blocks.slice(0, 100);
+}
+
+function contractorHasOpenEndedInternalHours_(contractor) {
+  const statusGroups =
+    contractor.statusGroups || {};
+
+  return Object.keys(statusGroups).some(status => {
+    const projectsByName =
+      statusGroups[status] || {};
+
+    return Object.keys(projectsByName).some(projectName => {
+      const project =
+        projectsByName[projectName];
+
+      return (project.roles || []).some(role =>
+        role.isInternalNoHours &&
+        Number(role.billedTotal || 0) > 0
+      );
+    });
+  });
 }
 
 function buildContractorWorkloadProjectDetailText_(project) {

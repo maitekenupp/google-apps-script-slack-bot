@@ -123,7 +123,7 @@ function buildContractorAssignmentBlocks_(session) {
   }
 
   buttons.push(
-    dangerButton_("❌ Cancel", "contractor_cancel")
+    dangerButton_("Cancel", "contractor_cancel")
   );
 
   return [
@@ -388,7 +388,7 @@ function buildContractorReviewBlocks_(session) {
       elements: [
         button_("Previous", "contractor_review_previous"),
         primaryButton_("✅ Create Assignments", "contractor_create_confirm"),
-        dangerButton_("❌ Cancel", "contractor_cancel")
+        dangerButton_("Cancel", "contractor_cancel")
       ]
     }
   ];

@@ -263,7 +263,7 @@ function buildSowAssignmentSelectBlocks_(session) {
         elements: [
           primaryButton_("✅ Create SOW Draft", "sow_create_confirm"),
           button_("⬅️ Back", "sow_admin_start"),
-          dangerButton_("❌ Cancel", "sow_cancel")
+          dangerButton_("Cancel", "sow_cancel")
         ]
       }
     ];

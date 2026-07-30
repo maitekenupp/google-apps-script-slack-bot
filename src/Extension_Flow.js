@@ -378,7 +378,7 @@ function buildExtensionAssignmentSelectedBlocks_(session) {
       elements: [
         button_("⬅️ Previous", "extension_previous"),
         button_("📝 Request Hours", "extension_open_modal"),
-        dangerButton_("❌ Cancel", "extension_cancel")
+        dangerButton_("Cancel", "extension_cancel")
       ]
     }
   ];

@@ -24,6 +24,11 @@ function handleIzaCommand(event) {
   const channelId = event.channel;
   const userId = event.user;
 
+  if (channelId === REIMBURSEMENT_CHANNEL) {
+    handleReimbursementChannelGreeting_(event);
+    return;
+  }
+
   if (isGreeting(text)) {
     sendMainMenuToDm_(channelId, userId);
     return;
@@ -60,10 +65,6 @@ function handleMenuReply(event) {
   if (isDirectMessage) {
     sendIzaMainMenu(channelId, userId);
     return;
-  }
-
-  if (normalizedText.includes("iza")) {
-    sendMainMenuToDm_(channelId, userId);
   }
 }
 

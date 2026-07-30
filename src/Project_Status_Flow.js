@@ -294,7 +294,7 @@ function buildProjectStatusReviewBlocks_(session) {
       elements: [
         button_("⬅️ Back", "project_status_update_start"),
         primaryButton_("✅ Confirm Update", "project_status_confirm"),
-        dangerButton_("❌ Cancel", "project_status_cancel")
+        dangerButton_("Cancel", "project_status_cancel")
       ]
     }
   ];

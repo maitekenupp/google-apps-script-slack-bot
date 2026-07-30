@@ -21,19 +21,123 @@ function handleIzaButtonClick_(payload) {
     return;
   }
 
+  /************************************
+   * REIMBURSEMENTS
+   ************************************/
+
+  if (actionId === "reimbursement_summary") {
+    handleReimbursementSummary_(
+      context.channelId,
+      context.messageTs
+    );
+    return;
+  }
+
+  if (
+    actionId === "reimbursement_select_anthony" ||
+    actionId === "reimbursement_select_cindy"
+  ) {
+    handleReimbursementPersonSelect_(
+      context.channelId,
+      context.messageTs,
+      context.userId,
+      payload.actions[0].value
+    );
+    return;
+  }
+
+  if (actionId === "reimbursement_enter_value") {
+    handleReimbursementEnterValue_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "reimbursement_next_step") {
+    handleReimbursementNextStep_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "reimbursement_previous_step") {
+    handleReimbursementPreviousStep_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "reimbursement_save_confirm") {
+    handleReimbursementSaveConfirm_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "reimbursement_cancel") {
+    handleReimbursementCancel_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "reimbursement_close") {
+    handleReimbursementClose_(
+      context.channelId,
+      context.messageTs
+    );
+    return;
+  }
+
+  if (actionId === "reimbursement_field_select") {
+    handleReimbursementFieldSelect_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  if (actionId === "reimbursement_enter_miles") {
+    handleReimbursementEnterMiles_(
+      payload,
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return;
+  }
+
+  /************************************
+   * EXISTING ROUTES
+   ************************************/
+
   if (routeMainMenuAction_(actionId, payload, context)) return;
-  if (routeAdminMenuAction_(actionId, payload, context)) return;
   if (routeOperationsAction_(actionId, payload, context)) return;
+  if (routeInvoiceAction_(actionId, payload, context)) return;
+  if (routeExtensionAction_(actionId, payload, context)) return;
+  if (routePublicRoleClaimAction_(actionId, payload, context)) return;
+
+  if (routeAdminMenuAction_(actionId, payload, context)) return;
   if (routeProjectStatusAction_(actionId, payload, context)) return;
   if (routeProjectCreationAction_(actionId, payload, context)) return;
   if (routeRoleCreationAction_(actionId, payload, context)) return;
   if (routeContractorAssignmentAction_(actionId, payload, context)) return;
-  if (routePublicRoleClaimAction_(actionId, payload, context)) return;
   if (routeClaimsAdminAction_(actionId, payload, context)) return;
   if (routeClientAction_(actionId, payload, context)) return;
-  if (routeExtensionAction_(actionId, payload, context)) return;
   if (routeExistingProjectAction_(actionId, payload, context)) return;
-  if (routeInvoiceAction_(actionId, payload, context)) return;
   if (routeInvoiceAdminAction_(actionId, payload, context)) return;
   if (routeSowAction_(actionId, payload, context)) return;
 
@@ -53,7 +157,9 @@ function canUserRunSlackAction_(actionId, context) {
   const publicActions = [
     "project_role_claim_start",
     "project_role_claim_submit_ephemeral",
-    "role_claim_checkbox_select"
+    "invoice_back_to_review",
+    "role_claim_checkbox_select",
+    "finance_summary_open_sheet"
   ];
 
   const contractorActions = [
@@ -82,7 +188,8 @@ function canUserRunSlackAction_(actionId, context) {
     "extension_open_modal",
     "extension_cancel_request",
 
-    "my_workload"
+    "my_workload",
+    "my_workload_details"
   ];
 
   if (publicActions.includes(actionId)) {
@@ -135,6 +242,10 @@ function routeMainMenuAction_(actionId, payload, context) {
     return true;
   }
 
+  if (actionId === "finance_summary_open_sheet") {
+    return true;
+  }
+
   return false;
 }
 
@@ -144,12 +255,22 @@ function routeMainMenuAction_(actionId, payload, context) {
  ************************************/
 
 function routeAdminMenuAction_(actionId, payload, context) {
+  if (!isIzaAdmin_(context.userId)) {
+    updateIzaMenu(
+      context.channelId,
+      context.messageTs,
+      buildAccessDeniedBlocks_(),
+      "Access denied"
+    );
+    return true;
+  }
+
   if (actionId === "admin_menu") {
     updateIzaMenu(
       context.channelId,
       context.messageTs,
       buildAdminMenuBlocks_(),
-      "IZA Admin Menu"
+      "Admin Menu"
     );
     return true;
   }
@@ -249,12 +370,22 @@ function routeAdminMenuAction_(actionId, payload, context) {
  ************************************/
 
 function routeOperationsAction_(actionId, payload, context) {
+  if (!isIzaContractor_(context.userId)) {
+    updateIzaMenu(
+      context.channelId,
+      context.messageTs,
+      buildOperationsAccessDeniedBlocks_(),
+      "Access denied"
+    );
+    return true;
+  }
+
   if (actionId === "menu_operations") {
     updateIzaMenu(
       context.channelId,
       context.messageTs,
       buildOperationsMenuBlocks_(),
-      "IZA Operations Menu"
+      "Operations Menu"
     );
     return true;
   }
@@ -271,6 +402,24 @@ function routeOperationsAction_(actionId, payload, context) {
   if (actionId === "my_workload_details") {
     openMyWorkloadDetailsModal_(
       payload,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "invoice_start") {
+    handleInvoiceStart_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "extension_start") {
+    handleExtensionStart_(
+      context.channelId,
+      context.messageTs,
       context.userId
     );
     return true;
@@ -1134,6 +1283,15 @@ function routeInvoiceAction_(actionId, payload, context) {
     return true;
   }
 
+  if (actionId === "invoice_back_to_review") {
+    handleInvoiceBackToReview_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
   if (actionId === "invoice_pay_to_yes") {
     handleInvoicePayToYes_(
       context.channelId,
@@ -1353,6 +1511,14 @@ function showSignatureSummary_(channelId, messageTs) {
 
 function handleSlackViewSubmission_(payload) {
   const callbackId = payload.view.callback_id;
+
+  if (callbackId === "reimbursement_miles_modal_submit") {
+    return handleReimbursementMilesModalSubmit_(payload);
+  }
+
+  if (callbackId === "reimbursement_value_modal_submit") {
+    return handleReimbursementValueModalSubmit_(payload);
+  }
 
   if (callbackId === "project_details_submit") {
     return handleProjectDetailsSubmit_(payload);

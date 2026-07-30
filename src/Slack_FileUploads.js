@@ -51,7 +51,7 @@ function saveSlackFileToDrive(fileId) {
   props.setProperty(processedKey, savedFile.getId());
 
   sendSlackMessage(
-    ALLOWED_CHANNEL,
+    REIMBURSEMENT_CHANNEL,
     `✅ *${file.name}* has been saved to Google Drive.\n${savedFile.getUrl()}`
   );
 }
@@ -81,7 +81,7 @@ function isFileFromAllowedChannel_(file) {
     ...(file.groups || [])
   ];
 
-  return channels.includes(ALLOWED_CHANNEL);
+  return channels.includes(REIMBURSEMENT_CHANNEL);
 }
 
 
@@ -103,7 +103,7 @@ function saveSlackFileBlobToDrive_(file, token) {
       .setProperty(`PROCESSED_${file.id}`, "duplicate_filename");
 
     sendSlackMessage(
-      ALLOWED_CHANNEL,
+      REIMBURSEMENT_CHANNEL,
       `⚠️ Duplicate file not uploaded: *${fileName}*\nA file with this name already exists in Google Drive.`
     );
 

@@ -321,7 +321,7 @@ function buildClientReviewBlocks_(clientData) {
       elements: [
         primaryButton_("✅ Create Client", "client_create_confirm"),
         button_("✏️ Edit", "client_edit"),
-        dangerButton_("❌ Cancel", "client_create_cancel")
+        dangerButton_("Cancel", "client_create_cancel")
       ]
     }
   ];

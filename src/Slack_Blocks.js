@@ -219,6 +219,46 @@ function buildOperationsMenuBlocks_() {
   ];
 }
 
+function buildAccessDeniedBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "🔒 *Access denied*\n\n" +
+          "This area is only available to admin users."
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", "menu_main")
+      ]
+    }
+  ];
+}
+
+function buildOperationsAccessDeniedBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "🔒 *Operations menu*\n\n" +
+          "I could not find an active contractor profile for you."
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", "menu_main")
+      ]
+    }
+  ];
+}
+
 
 /************************************
  * BACKWARD COMPATIBILITY MENUS

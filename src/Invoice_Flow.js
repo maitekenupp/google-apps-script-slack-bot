@@ -17,7 +17,12 @@
  ************************************/
 
 function handleInvoiceStart_(channelId, messageTs, userId) {
-  if (!isInvoiceSubmissionWindowOpen_()) {
+  clearInvoiceSession_(userId);
+
+  const invoiceWindow =
+    getInvoiceSubmissionWindow_();
+
+  if (!invoiceWindow.isOpen) {
     updateIzaMenu(
       channelId,
       messageTs,
@@ -52,12 +57,34 @@ function handleInvoiceStart_(channelId, messageTs, userId) {
     return;
   }
 
+  const billingPeriod =
+    getInvoiceBillingPeriodForWindow_(invoiceWindow);
+
+  const billingMonth =
+    invoiceMonthKey_(billingPeriod);
+
+  const existingInvoice =
+    findContractorInvoiceForMonth_(
+      contractor.id,
+      billingMonth
+    );
+
+  if (existingInvoice) {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildInvoiceAlreadySubmittedBlocks_(billingPeriod),
+      "Invoice Already Submitted"
+    );
+    return;
+  }
+
   const session = {
     contractor,
     assignments: [],
     selectedAssignmentId: null,
     lineItems: [],
-    billingPeriod: null,
+    billingPeriod,
     notes: "",
     payTo: contractor.payTo || ""
   };
@@ -84,6 +111,14 @@ function handleInvoicePayToYes_(channelId, messageTs, userId) {
     handleInvoiceStart_(channelId, messageTs, userId);
     return;
   }
+
+  const invoiceWindow =
+    getInvoiceSubmissionWindow_();
+
+  session.billingPeriod =
+    getInvoiceBillingPeriodForWindow_(invoiceWindow);
+
+  saveInvoiceSession_(userId, session);
 
   updateIzaMenu(
     channelId,
@@ -204,7 +239,7 @@ function buildInvoicePayToBlocks_(session) {
       elements: [
         button_("✅ Yes", "invoice_pay_to_yes"),
         button_("✏️ Edit", "invoice_pay_to_edit"),
-        dangerButton_("❌ Cancel", "invoice_cancel")
+        dangerButton_("Cancel", "invoice_cancel")
       ]
     }
   ];
@@ -333,7 +368,7 @@ function buildInvoiceAssignmentSelectBlocks_(session) {
         elements: [
           button_("⬅️ Previous", "invoice_assignment_previous"),
           button_("✍️ Enter Hours", "invoice_open_line_modal"),
-          dangerButton_("❌ Cancel", "invoice_cancel")
+          dangerButton_("Cancel", "invoice_cancel")
         ]
       }
     ];
@@ -346,7 +381,8 @@ function buildInvoiceAssignmentSelectBlocks_(session) {
         type: "mrkdwn",
         text:
           "💵 *Submit Invoice*\n\n" +
-          `*Contractor:* ${session.contractor.name}\n\n` +
+          `*Contractor:* ${session.contractor.name}\n` +
+          `*Billing Period:* ${invoiceFormatShortDate_(session.billingPeriod)}\n\n` +
           "Select the assignment you want to bill for."
       }
     },
@@ -375,7 +411,7 @@ function buildInvoiceAssignmentSelectBlocks_(session) {
     {
       type: "actions",
       elements: [
-        dangerButton_("❌ Cancel", "invoice_cancel")
+        dangerButton_("Cancel", "invoice_cancel")
       ]
     }
   ];
@@ -578,7 +614,9 @@ function handleInvoiceLineModalSubmission_(payload) {
     session.lineItems.push(lineItem);
   }
 
-  session.billingPeriod = invoiceLastDayOfCurrentMonth_();
+  session.billingPeriod =
+    session.billingPeriod || getInvoiceBillingPeriodForActiveWindow_();
+
   session.notes = notes;
   session.selectedAssignmentId = null;
 
@@ -714,7 +752,7 @@ function buildInvoiceReviewBlocks_(session) {
     {
       type: "actions",
       elements: [
-        dangerButton_("❌ Cancel", "invoice_cancel")
+        dangerButton_("Cancel", "invoice_cancel")
       ]
     }
   ];
@@ -729,16 +767,22 @@ function buildInvoiceSubmitChoiceBlocks_(session) {
       text: {
         type: "mrkdwn",
         text:
-          "💵 *Submit Invoice*\n\n" +
+          "💵 *Final Invoice Confirmation*\n\n" +
+          `*Billing Period:* ${invoiceFormatShortDate_(session.billingPeriod)}\n` +
           `*Invoice Total:* ${invoiceFormatMoney_(total)}\n\n` +
-          "*Submit Invoice* creates and submits the IZA-generated invoice PDF only.\n\n" +
-          "*Submit + Upload File* creates the IZA invoice PDF and then lets you upload your own invoice file too.\n\n" +
-          "If you upload your own invoice file, it must match the amount you declared here."
+          "Please review carefully before submitting.\n\n" +
+          "*You can submit only one invoice per payment window.* " +
+          "After submission, you will *not* be able to add more hours to this invoice.\n\n" +
+          "*Submit Invoice* creates and submits the company-generated invoice PDF only.\n\n" +
+          "*Submit + Upload File* creates the company-generated invoice PDF and then lets you upload your own invoice file too.\n\n" +
+          "If you upload your own invoice file, *it must match* the amount you declared here.\n\n" +
+          "Are you sure this invoice is complete?"
       }
     },
     {
       type: "actions",
       elements: [
+        button_("⬅️ Back to Review", "invoice_back_to_review"),
         primaryButton_("✅ Submit Invoice", "invoice_create_confirm"),
         button_("📎 Submit + Upload File", "invoice_create_with_upload")
       ]
@@ -746,10 +790,26 @@ function buildInvoiceSubmitChoiceBlocks_(session) {
     {
       type: "actions",
       elements: [
-        dangerButton_("❌ Cancel", "invoice_cancel")
+        dangerButton_("Cancel", "invoice_cancel")
       ]
     }
   ];
+}
+
+function handleInvoiceBackToReview_(channelId, messageTs, userId) {
+  const session = getInvoiceSession_(userId);
+
+  if (!session || !session.lineItems || !session.lineItems.length) {
+    handleInvoiceStart_(channelId, messageTs, userId);
+    return;
+  }
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildInvoiceReviewBlocks_(session),
+    "Review Invoice"
+  );
 }
 
 
@@ -784,7 +844,7 @@ function handleInvoiceCreateConfirm_(channelId, messageTs, userId, wantsFileUplo
   const items = session.lineItems;
 
   const billingPeriodRaw =
-    session.billingPeriod || invoiceLastDayOfCurrentMonth_();
+    session.billingPeriod || getInvoiceBillingPeriodForActiveWindow_();
 
   const billingMonth = invoiceMonthKey_(billingPeriodRaw);
   const invoiceNumber = invoiceNumberFromMonth_(billingMonth);
@@ -1232,6 +1292,19 @@ function invoiceFormatMoney_(value) {
   });
 }
 
+function getInvoiceBillingPeriodForActiveWindow_() {
+  return getInvoiceBillingPeriodForWindow_(
+    getInvoiceSubmissionWindow_()
+  );
+}
+
+function getInvoiceBillingPeriodForWindow_(windowData) {
+  return (
+    windowData?.billingPeriod ||
+    invoiceLastDayOfCurrentMonth_()
+  );
+}
+
 function invoiceLastDayOfCurrentMonth_() {
   const timezone = "America/Los_Angeles";
 
@@ -1291,4 +1364,27 @@ function invoiceNumberFromMonth_(billingMonth) {
   const month = parts[1];
 
   return `${month}-${year}`;
+}
+
+function buildInvoiceAlreadySubmittedBlocks_(billingPeriod) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "💵 *Submit Invoice*\n\n" +
+          `You already submitted your invoice for *${invoiceFormatShortDate_(billingPeriod)}*.\n\n` +
+          "Only one invoice can be submitted per payment window.\n\n" +
+          "If you made a mistake, please report it so the team can review."
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("⬅️ Back", "menu_operations"),
+        button_("🐞 Report Bug", "bug_report_open")
+      ]
+    }
+  ];
 }

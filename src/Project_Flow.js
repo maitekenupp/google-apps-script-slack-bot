@@ -92,7 +92,7 @@ function buildProjectClientBlocks_(answers) {
   }
 
   navigationButtons.push(
-    dangerButton_("❌ Cancel", "project_create_cancel")
+    dangerButton_("Cancel", "project_create_cancel")
   );
 
   return [
@@ -205,7 +205,7 @@ function buildProjectDetailsPromptBlocks_(answers) {
   }
 
   navigationButtons.push(
-    dangerButton_("❌ Cancel", "project_create_cancel")
+    dangerButton_("Cancel", "project_create_cancel")
   );
 
   return [
@@ -448,7 +448,7 @@ function buildProjectDatesBlocks_(answers) {
   }
 
   navigationButtons.push(
-    dangerButton_("❌ Cancel", "project_create_cancel")
+    dangerButton_("Cancel", "project_create_cancel")
   );
 
   return [
@@ -592,7 +592,7 @@ function buildProjectStatusBlocks_(answers) {
   }
 
   navigationButtons.push(
-    dangerButton_("❌ Cancel", "project_create_cancel")
+    dangerButton_("Cancel", "project_create_cancel")
   );
 
   return [
@@ -731,7 +731,7 @@ function buildProjectLinksPromptBlocks_(answers) {
   }
 
   navigationButtons.push(
-    dangerButton_("❌ Cancel", "project_create_cancel")
+    dangerButton_("Cancel", "project_create_cancel")
   );
 
   return [
@@ -995,7 +995,7 @@ function buildProjectReviewBlocks_(answers) {
       elements: [
         button_("Previous", "project_review_previous"),
         primaryButton_("✅ Create Project", "project_create_confirm"),
-        dangerButton_("❌ Cancel", "project_create_cancel")
+        dangerButton_("Cancel", "project_create_cancel")
       ]
     }
   ];

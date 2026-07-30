@@ -76,7 +76,7 @@ function buildRolePricingBlocks_(session) {
     {
       type: "actions",
       elements: [
-        dangerButton_("❌ Cancel", "roles_cancel")
+        dangerButton_("Cancel", "roles_cancel")
       ]
     }
   ];
@@ -166,7 +166,7 @@ function buildRoleSelectBlocks_(session) {
   }
 
   navigationButtons.push(
-    dangerButton_("❌ Cancel", "roles_cancel")
+    dangerButton_("Cancel", "roles_cancel")
   );
 
   return [
@@ -300,7 +300,7 @@ function buildRoleDetailsPromptBlocks_(session) {
   }
 
   navigationButtons.push(
-    dangerButton_("❌ Cancel", "roles_cancel")
+    dangerButton_("Cancel", "roles_cancel")
   );
 
   return [
@@ -588,7 +588,7 @@ function buildRoleReviewBlocks_(session) {
       elements: [
         button_("Previous", "role_review_previous"),
         primaryButton_("Add Role", "role_add_to_list"),
-        dangerButton_("❌ Cancel", "roles_cancel")
+        dangerButton_("Cancel", "roles_cancel")
       ]
     }
   ];
@@ -671,7 +671,7 @@ function buildRolesSummaryBlocks_(session) {
   }
 
   actionButtons.push(
-    dangerButton_("❌ Cancel", "roles_cancel")
+    dangerButton_("Cancel", "roles_cancel")
   );
 
   return [

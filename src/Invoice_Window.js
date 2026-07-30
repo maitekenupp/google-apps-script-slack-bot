@@ -45,16 +45,19 @@ function handleInvoiceWindowModalSubmission_(payload) {
   const values = payload.view.state.values;
 
   const startDate =
-    values.start_date_block.start_date_value.selected_date;
+    values.start_date_block?.start_date_value?.selected_date || "";
 
   const endDate =
-    values.end_date_block.end_date_value.selected_date;
+    values.end_date_block?.end_date_value?.selected_date || "";
 
-  if (!startDate || !endDate) {
+  const billingPeriod =
+    values.billing_period_block?.billing_period_value?.selected_date || "";
+
+  if (!startDate || !endDate || !billingPeriod) {
     return {
       response_action: "errors",
       errors: {
-        start_date_block: "Select both start and end dates."
+        billing_period_block: "Select start date, end date, and billing period."
       }
     };
   }
@@ -68,7 +71,11 @@ function handleInvoiceWindowModalSubmission_(payload) {
     };
   }
 
-  saveInvoiceSubmissionWindow_(startDate, endDate);
+  saveInvoiceSubmissionWindow_(
+    startDate,
+    endDate,
+    billingPeriod
+  );
 
   const window = getInvoiceSubmissionWindow_();
 
@@ -99,7 +106,12 @@ function handleInvoiceWindowClose_(channelId, messageTs, userId) {
   postInvoiceWindowClosedAnnouncement_();
 
   postSlackMessage_(
-    CONTRACTOR_CLAIMS_CHANNEL,
+    REIMBURSEMENT_CHANNEL,
+    buildReimbursementWindowCloseSummary_()
+  );
+
+  postSlackMessage_(
+    FINANCE_CHANNEL,
     [
       {
         type: "section",
@@ -182,7 +194,7 @@ function buildInvoiceWindowModalView_(privateMetadata, window) {
         block_id: "start_date_block",
         label: {
           type: "plain_text",
-          text: "Start Date",
+          text: "Submission Start Date",
           emoji: true
         },
         element: {
@@ -196,7 +208,7 @@ function buildInvoiceWindowModalView_(privateMetadata, window) {
         block_id: "end_date_block",
         label: {
           type: "plain_text",
-          text: "End Date",
+          text: "Submission End Date",
           emoji: true
         },
         element: {
@@ -204,9 +216,53 @@ function buildInvoiceWindowModalView_(privateMetadata, window) {
           action_id: "end_date_value",
           initial_date: window.endDate || invoiceWindowToday_()
         }
+      },
+      {
+        type: "input",
+        block_id: "billing_period_block",
+        label: {
+          type: "plain_text",
+          text: "Billing Period",
+          emoji: true
+        },
+        element: {
+          type: "datepicker",
+          action_id: "billing_period_value",
+          initial_date:
+            window.billingPeriod || invoiceWindowDefaultBillingPeriod_()
+        }
       }
     ]
   };
+}
+
+function invoiceWindowDefaultBillingPeriod_() {
+  const today =
+    invoiceWindowDateFromIso_(invoiceWindowToday_());
+
+  const lastDayPreviousMonth =
+    new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      0
+    );
+
+  return Utilities.formatDate(
+    lastDayPreviousMonth,
+    "America/Los_Angeles",
+    "yyyy-MM-dd"
+  );
+}
+
+function invoiceWindowDateFromIso_(dateString) {
+  const parts =
+    String(dateString || "").split("-");
+
+  return new Date(
+    Number(parts[0]),
+    Number(parts[1]) - 1,
+    Number(parts[2])
+  );
 }
 
 
@@ -214,11 +270,18 @@ function buildInvoiceWindowModalView_(privateMetadata, window) {
  * WINDOW STATE
  ************************************/
 
-function saveInvoiceSubmissionWindow_(startDate, endDate) {
+function saveInvoiceSubmissionWindow_(startDate, endDate, billingPeriod) {
+  if (!startDate || !endDate || !billingPeriod) {
+    throw new Error(
+      `Missing invoice window value. start=${startDate}, end=${endDate}, billingPeriod=${billingPeriod}`
+    );
+  }
+
   const props = PropertiesService.getScriptProperties();
 
-  props.setProperty("INVOICE_WINDOW_START", startDate);
-  props.setProperty("INVOICE_WINDOW_END", endDate);
+  props.setProperty("INVOICE_WINDOW_START", String(startDate));
+  props.setProperty("INVOICE_WINDOW_END", String(endDate));
+  props.setProperty("INVOICE_WINDOW_BILLING_PERIOD", String(billingPeriod));
 }
 
 function closeInvoiceSubmissionWindow_() {
@@ -233,6 +296,10 @@ function getInvoiceSubmissionWindow_() {
 
   const startDate = props.getProperty("INVOICE_WINDOW_START");
   const endDate = props.getProperty("INVOICE_WINDOW_END");
+  const billingPeriod =
+    props.getProperty("INVOICE_WINDOW_BILLING_PERIOD") ||
+    invoiceWindowDefaultBillingPeriod_();
+
   const today = invoiceWindowToday_();
 
   const isOpen =
@@ -244,6 +311,7 @@ function getInvoiceSubmissionWindow_() {
   return {
     startDate,
     endDate,
+    billingPeriod,
     today,
     isOpen
   };
@@ -335,7 +403,7 @@ function runDailyInvoiceWindowReminder() {
             "⏰ *Invoice Submission Reminder*\n\n" +
             "Hi everyone!\n\n" +
             "Today is the last day to submit invoices.\n" +
-            "The submission window closes tonight at *11:59 PM PT*.\n\n" +
+            "The submission window closes tonight at *11:59 PM PST*.\n\n" +
             "Please submit your invoice through IZA if you have one for this billing period.\n\n" +
             "If you already submitted your invoice, please disregard this message."
         }
