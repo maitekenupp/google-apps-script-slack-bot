@@ -347,6 +347,21 @@ function buildInvoiceAssignmentSelectBlocks_(session) {
   );
 
   if (selected) {
+    const selectedActions = [
+      button_("⬅️ Previous", "invoice_assignment_previous"),
+      button_("✍️ Enter Hours", "invoice_open_line_modal")
+    ];
+
+    if (session.lineItems && session.lineItems.length) {
+      selectedActions.push(
+        button_("Cancel This Role", "invoice_cancel_selected_assignment")
+      );
+    }
+
+    selectedActions.push(
+      dangerButton_("Cancel Invoice", "invoice_cancel")
+    );
+
     return [
       {
         type: "section",
@@ -365,14 +380,42 @@ function buildInvoiceAssignmentSelectBlocks_(session) {
       },
       {
         type: "actions",
-        elements: [
-          button_("⬅️ Previous", "invoice_assignment_previous"),
-          button_("✍️ Enter Hours", "invoice_open_line_modal"),
-          dangerButton_("Cancel", "invoice_cancel")
-        ]
+        elements: selectedActions
       }
     ];
   }
+
+  const dropdownActions = [
+    {
+      type: "static_select",
+      action_id: "invoice_assignment_select",
+      placeholder: {
+        type: "plain_text",
+        text: "Select assignment",
+        emoji: true
+      },
+      options: session.assignments.slice(0, 100).map(item => ({
+        text: {
+          type: "plain_text",
+          text: invoiceOptionText_(item),
+          emoji: true
+        },
+        value: item.id
+      }))
+    }
+  ];
+
+  const bottomActions = [];
+
+  if (session.lineItems && session.lineItems.length) {
+    bottomActions.push(
+      button_("Cancel This Role", "invoice_cancel_selected_assignment")
+    );
+  }
+
+  bottomActions.push(
+    dangerButton_("Cancel Invoice", "invoice_cancel")
+  );
 
   return [
     {
@@ -388,31 +431,11 @@ function buildInvoiceAssignmentSelectBlocks_(session) {
     },
     {
       type: "actions",
-      elements: [
-        {
-          type: "static_select",
-          action_id: "invoice_assignment_select",
-          placeholder: {
-            type: "plain_text",
-            text: "Select assignment",
-            emoji: true
-          },
-          options: session.assignments.slice(0, 100).map(item => ({
-            text: {
-              type: "plain_text",
-              text: invoiceOptionText_(item),
-              emoji: true
-            },
-            value: item.id
-          }))
-        }
-      ]
+      elements: dropdownActions
     },
     {
       type: "actions",
-      elements: [
-        dangerButton_("Cancel", "invoice_cancel")
-      ]
+      elements: bottomActions
     }
   ];
 }
@@ -440,6 +463,13 @@ function handleInvoiceOpenLineModal_(payload, channelId, messageTs, userId) {
     channelId,
     messageTs
   });
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildInvoiceLineModalOpenBlocks_(),
+    "Invoice Hours"
+  );
 
   openSlackModal_(
     payload.trigger_id,
@@ -472,7 +502,7 @@ function buildInvoiceLineModalView_(privateMetadata, session) {
     },
     private_metadata: privateMetadata,
     blocks: [
-      {
+            {
         type: "input",
         block_id: "hours_block",
         label: {
@@ -480,13 +510,16 @@ function buildInvoiceLineModalView_(privateMetadata, session) {
           text: "Hours Worked",
           emoji: true
         },
+        hint: {
+          type: "plain_text",
+          text: "Enter decimal hours only. Example: 5.5 for 5 hours and 30 minutes."
+        },
         element: {
           type: "plain_text_input",
           action_id: "hours_value",
-          initial_value: existing ? String(existing.hours) : "",
           placeholder: {
             type: "plain_text",
-            text: "Example: 5"
+            text: "Example: 5.5"
           }
         }
       },
@@ -547,6 +580,16 @@ function handleInvoiceLineModalSubmission_(payload) {
 
   const hoursText =
     values.hours_block.hours_value.value || "";
+
+    if (hoursText.includes(":")) {
+    return {
+      response_action: "errors",
+      errors: {
+        hours_block:
+          "Please enter decimal hours only. Example: use 5.5 instead of 5:30."
+      }
+    };
+  }
 
   const hours = Number(hoursText);
 
@@ -620,7 +663,53 @@ function handleInvoiceLineModalSubmission_(payload) {
   session.notes = notes;
   session.selectedAssignmentId = null;
 
+  session.pendingReviewUpdate = true;
+
   saveInvoiceSession_(userId, session);
+
+  return {
+    response_action: "clear"
+  };
+}
+
+function buildInvoiceLineModalOpenBlocks_() {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          "💵 *Submit Invoice*\n\n" +
+          "Enter your hours in the modal.\n\n" +
+          "After saving the modal, click *Continue* to review your invoice."
+      }
+    },
+    {
+      type: "actions",
+      elements: [
+        button_("Continue", "invoice_line_continue"),
+        button_("Cancel", "invoice_cancel")
+      ]
+    }
+  ];
+}
+
+function handleInvoiceLineContinue_(channelId, messageTs, userId) {
+  const session =
+    getInvoiceSession_(userId);
+
+  if (!session || !session.lineItems || !session.lineItems.length) {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildInvoiceMessageBlocks_(
+        "💵 *Submit Invoice*\n\nI could not find a saved invoice line. Please try again.",
+        "menu_operations"
+      ),
+      "Submit Invoice"
+    );
+    return;
+  }
 
   updateIzaMenu(
     channelId,
@@ -628,10 +717,6 @@ function handleInvoiceLineModalSubmission_(payload) {
     buildInvoiceReviewBlocks_(session),
     "Review Invoice"
   );
-
-  return {
-    response_action: "clear"
-  };
 }
 
 
@@ -809,6 +894,44 @@ function handleInvoiceBackToReview_(channelId, messageTs, userId) {
     messageTs,
     buildInvoiceReviewBlocks_(session),
     "Review Invoice"
+  );
+}
+
+function handleInvoiceCancelSelectedAssignment_(channelId, messageTs, userId) {
+  const session =
+    getInvoiceSession_(userId);
+
+  if (!session) {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildInvoiceMessageBlocks_(
+        "💵 *Submit Invoice*\n\nI could not find your invoice draft. Please start again.",
+        "menu_operations"
+      ),
+      "Submit Invoice"
+    );
+    return;
+  }
+
+  session.selectedAssignmentId = null;
+  saveInvoiceSession_(userId, session);
+
+  if (session.lineItems && session.lineItems.length) {
+    updateIzaMenu(
+      channelId,
+      messageTs,
+      buildInvoiceReviewBlocks_(session),
+      "Review Invoice"
+    );
+    return;
+  }
+
+  updateIzaMenu(
+    channelId,
+    messageTs,
+    buildInvoiceAssignmentSelectBlocks_(session),
+    "Submit Invoice"
   );
 }
 

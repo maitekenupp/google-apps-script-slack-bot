@@ -629,11 +629,14 @@ function handleClaimsAssignPerson_(channelId, messageTs, value) {
   );
 
   createProjectContractorAssignment_({
-    contractorName: contractor.name,
-    role: role.role,
-    hours: role.hours,
-    rate: contractor.rate,
-    projectId: item.project.id
+    contractorName: assignment.contractorName,
+    role: assignment.role,
+    hours: assignment.hours,
+    rate: assignment.rate,
+    projectId,
+    taskId:
+      assignment.taskId ||
+      findTaskIdForProjectRole_(projectId, assignment.role)
   });
 
   const stored = markClaimRoleAssigned_(

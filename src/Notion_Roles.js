@@ -56,6 +56,125 @@ function loadNotionRoleOptions_() {
   return roles;
 }
 
+function loadAvailableRoleOptionsForProject_(projectId, draftRoles) {
+  const allRoleOptions =
+    loadNotionRoleOptions_();
+
+  const existingRoleNames =
+    getExistingRoleNamesForProject_(projectId);
+
+  const draftRoleNames =
+    (draftRoles || [])
+      .map(role =>
+        normalizeRoleNameForCompare_(
+          role.roleName || role.role || ""
+        )
+      )
+      .filter(Boolean);
+
+  return allRoleOptions.filter(option => {
+    const roleName =
+      normalizeRoleNameForCompare_(
+        option.label || option.name || option.value
+      );
+
+    return (
+      roleName &&
+      !existingRoleNames.includes(roleName) &&
+      !draftRoleNames.includes(roleName)
+    );
+  });
+}
+
+function getExistingRoleNamesForProject_(projectId) {
+  const data =
+    notionFetch_(
+      `https://api.notion.com/v1/data_sources/${TASKS_DATA_SOURCE_ID}/query`,
+      "post",
+      {
+        filter: {
+          property: "Project",
+          relation: {
+            contains: projectId
+          }
+        },
+        page_size: 100
+      }
+    );
+
+  return (data.results || [])
+    .map(row =>
+      normalizeRoleNameForCompare_(
+        getExistingProjectRoleName_(row)
+      )
+    )
+    .filter(Boolean);
+}
+
+function getExistingProjectRoleName_(row) {
+  const property =
+    row.properties["Roles"];
+
+  if (!property) {
+    return "";
+  }
+
+  if (property.title && property.title.length) {
+    return property.title
+      .map(item => item.plain_text || item.text?.content || "")
+      .join("")
+      .trim();
+  }
+
+  if (property.rich_text && property.rich_text.length) {
+    return property.rich_text
+      .map(item => item.plain_text || item.text?.content || "")
+      .join("")
+      .trim();
+  }
+
+  if (property.multi_select && property.multi_select.length) {
+    return property.multi_select
+      .map(item => item.name)
+      .join(", ")
+      .trim();
+  }
+
+  if (property.select) {
+    return property.select.name || "";
+  }
+
+  return getText_(property);
+}
+
+function normalizeRoleNameForCompare_(roleName) {
+  return String(roleName || "")
+    .trim()
+    .toLowerCase();
+}
+
+function projectAlreadyHasRole_(projectId, roleName, draftRoles) {
+  const normalizedRole =
+    normalizeRoleNameForCompare_(roleName);
+
+  const existingRoleNames =
+    getExistingRoleNamesForProject_(projectId);
+
+  const draftRoleNames =
+    (draftRoles || [])
+      .map(role =>
+        normalizeRoleNameForCompare_(
+          role.roleName || role.role || ""
+        )
+      )
+      .filter(Boolean);
+
+  return (
+    existingRoleNames.includes(normalizedRole) ||
+    draftRoleNames.includes(normalizedRole)
+  );
+}
+
 
 /************************************
  * CREATE PROJECT ROLE

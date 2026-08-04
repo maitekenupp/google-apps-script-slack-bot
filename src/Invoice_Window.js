@@ -105,10 +105,8 @@ function handleInvoiceWindowClose_(channelId, messageTs, userId) {
 
   postInvoiceWindowClosedAnnouncement_();
 
-  postSlackMessage_(
-    REIMBURSEMENT_CHANNEL,
-    buildReimbursementWindowCloseSummary_()
-  );
+  const reimbursementSummary =
+    buildReimbursementWindowCloseSummary_();
 
   postSlackMessage_(
     FINANCE_CHANNEL,
@@ -117,7 +115,30 @@ function handleInvoiceWindowClose_(channelId, messageTs, userId) {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: buildInvoiceWindowCloseSummary_()
+          text:
+            reimbursementSummary.length > 2900
+              ? reimbursementSummary.substring(0, 2900) + "\n\n_Report shortened for Slack._"
+              : reimbursementSummary
+        }
+      }
+    ],
+    "Reimbursement Window Summary"
+  );
+
+  const invoiceSummary =
+    buildInvoiceWindowCloseSummary_();
+
+  postSlackMessage_(
+    FINANCE_CHANNEL,
+    [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            invoiceSummary.length > 2900
+              ? invoiceSummary.substring(0, 2900) + "\n\n_Report shortened for Slack._"
+              : invoiceSummary
         }
       }
     ],
@@ -452,7 +473,7 @@ function buildInvoiceWindowCloseSummary_() {
     submitted.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
   const billingPeriod =
-    invoiceLastDayOfCurrentMonth_();
+    getInvoiceSubmissionWindow_().billingPeriod;
 
   const billingPeriodText =
     invoiceFormatShortDate_(billingPeriod);
@@ -517,24 +538,19 @@ function loadInvoiceExpectedContractors_() {
 
 function loadInvoicesForCurrentBillingMonth_() {
   const billingPeriod =
-    invoiceLastDayOfCurrentMonth_();
+    getInvoiceSubmissionWindow_().billingPeriod;
 
-  const rows = queryAllDataSourceRows_(CONTRACTORS_INVOICES_DATA_SOURCE_ID);
+  const rows =
+    queryAllDataSourceRows_(CONTRACTORS_INVOICES_DATA_SOURCE_ID);
 
   return rows
     .map(row => {
       const p = row.properties;
 
-      const contractorId =
-        p["Contractor"]?.relation?.[0]?.id || "";
-
-      const billingDate =
-        p["Billing Period"]?.date?.start || "";
-
       return {
         id: row.id,
-        contractorId,
-        billingDate,
+        contractorId: p["Contractor"]?.relation?.[0]?.id || "",
+        billingDate: p["Billing Period"]?.date?.start || "",
         totalAmount: getNumber_(p["Total Amount"])
       };
     })

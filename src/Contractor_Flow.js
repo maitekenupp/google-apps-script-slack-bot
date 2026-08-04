@@ -480,7 +480,10 @@ function handleContractorCreateConfirm_(userId, channelId, messageTs) {
         role: assignment.role,
         hours: assignment.hours,
         rate: assignment.rate,
-        projectId
+        projectId,
+        taskId:
+          assignment.taskId ||
+          findTaskIdForProjectRole_(projectId, assignment.role)
       });
 
       assignedCount++;

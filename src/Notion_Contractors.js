@@ -55,8 +55,8 @@ function loadProjectRolesForAssignment_(projectId) {
     return JSON.parse(cached);
   }
 
-  const assignedRoleNames =
-    getAssignedRoleNamesForProject_(projectId);
+  const assignedTaskIds =
+    getAssignedTaskRoleIdsForProject_(projectId);
 
   const data =
     notionFetch_(
@@ -85,9 +85,10 @@ function loadProjectRolesForAssignment_(projectId) {
           getText_(row.properties["Deliverables"])
       }))
       .filter(role =>
+        role.taskId &&
         role.role &&
         role.hoursToContractor > 0 &&
-        !assignedRoleNames.includes(role.role)
+        !assignedTaskIds.includes(role.taskId)
       );
 
   const sortedRoles =
@@ -100,6 +101,35 @@ function loadProjectRolesForAssignment_(projectId) {
   );
 
   return sortedRoles;
+}
+
+function getAssignedTaskRoleIdsForProject_(projectId) {
+  const rows =
+    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+
+  const assignedTaskIds = [];
+
+  rows.forEach(row => {
+    const p = row.properties;
+
+    const rowProjectId =
+      p["Projects 1 related to"]?.relation?.[0]?.id || "";
+
+    if (rowProjectId !== projectId) {
+      return;
+    }
+
+    const taskIds =
+      getRelationIds_(p["Task / Role"]);
+
+    taskIds.forEach(taskId => {
+      if (taskId && !assignedTaskIds.includes(taskId)) {
+        assignedTaskIds.push(taskId);
+      }
+    });
+  });
+
+  return assignedTaskIds;
 }
 
 function getAssignedRoleNamesForProject_(projectId) {
@@ -171,6 +201,15 @@ function createProjectContractorAssignment_(assignmentData) {
             id: assignmentData.projectId
           }
         ]
+      },
+      "Task / Role": {
+        relation: assignmentData.taskId
+          ? [
+              {
+                id: assignmentData.taskId
+              }
+            ]
+          : []
       }
     }
   };
@@ -187,29 +226,80 @@ function createProjectContractorAssignment_(assignmentData) {
  * SORT HELPERS
  ************************************/
 
-function sortProjectRolesByRoleSort_(projectRoles) {
+function sortProjectRolesByRoleSort_(roles) {
   const roleOptions =
     loadNotionRoleOptions_();
 
   const sortByRoleName = {};
 
   roleOptions.forEach(role => {
-    sortByRoleName[role.label] =
+    const normalizedRole =
+      normalizeRoleNameForCompare_(
+        role.label
+      );
+
+    sortByRoleName[normalizedRole] =
       role.sortOrder || 9999;
   });
 
-  return projectRoles.sort((a, b) => {
+  return (roles || []).sort((a, b) => {
+    const aRole =
+      normalizeRoleNameForCompare_(
+        a.role || a.roleName
+      );
+
+    const bRole =
+      normalizeRoleNameForCompare_(
+        b.role || b.roleName
+      );
+
     const aSort =
-      sortByRoleName[a.role] || 9999;
+      sortByRoleName[aRole] || 9999;
 
     const bSort =
-      sortByRoleName[b.role] || 9999;
+      sortByRoleName[bRole] || 9999;
 
     if (aSort !== bSort) {
       return aSort - bSort;
     }
 
-    return String(a.role || "")
-      .localeCompare(String(b.role || ""));
+    return String(a.role || a.roleName || "")
+      .localeCompare(
+        String(b.role || b.roleName || ""),
+        undefined,
+        { sensitivity: "base" }
+      );
   });
+}
+
+function findTaskIdForProjectRole_(projectId, roleName) {
+  const data =
+    notionFetch_(
+      `https://api.notion.com/v1/data_sources/${TASKS_DATA_SOURCE_ID}/query`,
+      "post",
+      {
+        filter: {
+          property: "Project",
+          relation: {
+            contains: projectId
+          }
+        },
+        page_size: 100
+      }
+    );
+
+  const normalizedTarget =
+    normalizeRoleNameForCompare_(roleName);
+
+  const match =
+    (data.results || []).find(row => {
+      const existingRole =
+        normalizeRoleNameForCompare_(
+          getExistingProjectRoleName_(row)
+        );
+
+      return existingRole === normalizedTarget;
+    });
+
+  return match ? match.id : "";
 }

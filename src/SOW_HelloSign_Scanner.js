@@ -123,7 +123,10 @@ function scanHelloSignRequestedSignatures_() {
 
       updateSowContractorFileForAssignments_(
         item.assignmentIds,
-        signedFile
+        {
+          name: `${documentType} - Signed.pdf`,
+          url: signedFile.url
+        }
       );
 
       trashOldPendingSowFile_(item.pendingFileUrl);

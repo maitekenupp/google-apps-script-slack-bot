@@ -112,6 +112,10 @@ function isGreeting(text) {
     text.includes("hi") ||
     text.includes("hello") ||
     text.includes("hey") ||
+    text.includes("hola") ||
+    text.includes("buenos dias") ||
+    text.includes("buenos días") ||
+    text.includes("buenas tardes") ||
     text.includes("good morning") ||
     text.includes("good afternoon")
   );

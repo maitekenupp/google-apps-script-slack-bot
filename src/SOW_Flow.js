@@ -876,7 +876,7 @@ function finalizeSowsForProject_(projectId) {
       );
 
       const notionFileName = sowSafeFileName_(
-        `SOW - Pending Signature - ${group.projectName} - ${group.contractorName}.pdf`
+        `SOW - Pending Signature.pdf`
       );
 
       const pdfFile = finalizeContractorSowPdf_(

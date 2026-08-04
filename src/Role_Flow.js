@@ -116,15 +116,42 @@ function handleRolePricingSelect_(userId, channelId, messageTs, isCdef) {
 function buildRoleSelectBlocks_(session) {
   session = session || {};
 
-  const roleOptions =
-    loadNotionRoleOptions_();
-
   const currentRole =
     session.currentRoleDraft || {};
 
+  const projectId =
+    session.createdProject?.id || "";
+
+  let roleOptions =
+    projectId
+      ? loadAvailableRoleOptionsForProject_(
+          projectId,
+          session.roleDrafts || []
+        )
+      : loadNotionRoleOptions_();
+
+  if (currentRole.roleId) {
+    const selectedStillAvailable =
+      roleOptions.some(role =>
+        role.id === currentRole.roleId
+      );
+
+    if (!selectedStillAvailable) {
+      roleOptions =
+        loadNotionRoleOptions_()
+          .filter(role =>
+            role.id === currentRole.roleId
+          )
+          .concat(roleOptions);
+    }
+  }
+
+  const currentRoleId =
+    currentRole.roleId || "";
+
   const selectedRole =
     roleOptions.find(role =>
-      role.id === currentRole.roleId
+      role.id === currentRoleId
     );
 
   const roleSelect = {
@@ -132,18 +159,31 @@ function buildRoleSelectBlocks_(session) {
     action_id: "role_select",
     placeholder: {
       type: "plain_text",
-      text: "Select a role",
+      text: roleOptions.length
+        ? "Select a role"
+        : "No roles available",
       emoji: true
     },
     options:
-      roleOptions.map(role => ({
-        text: {
-          type: "plain_text",
-          text: role.label,
-          emoji: true
-        },
-        value: role.id
-      }))
+      roleOptions.length
+        ? roleOptions.map(role => ({
+            text: {
+              type: "plain_text",
+              text: role.label,
+              emoji: true
+            },
+            value: role.id
+          }))
+        : [
+            {
+              text: {
+                type: "plain_text",
+                text: "No roles available",
+                emoji: true
+              },
+              value: "none"
+            }
+          ]
   };
 
   if (selectedRole) {
@@ -202,6 +242,10 @@ function handleRoleSelect_(payload) {
   const selectedRoleId =
     payload.actions[0].selected_option.value;
 
+  if (selectedRoleId === "none") {
+    return;
+  }
+
   const session =
     getProjectSession_(context.userId);
 
@@ -210,7 +254,10 @@ function handleRoleSelect_(payload) {
   }
 
   const roleOptions =
-    loadNotionRoleOptions_();
+    loadAvailableRoleOptionsForProject_(
+      session.createdProject.id,
+      session.roleDrafts || []
+    );
 
   const selectedRole =
     roleOptions.find(role =>

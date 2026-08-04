@@ -180,6 +180,8 @@ function canUserRunSlackAction_(actionId, context) {
     "invoice_add_another",
     "invoice_upload_cancel",
     "invoice_finish_review",
+    "invoice_line_continue",
+    "invoice_cancel_selected_assignment",
 
     "extension_start",
     "extension_assignment_select",
@@ -1219,6 +1221,24 @@ function routeExistingProjectAction_(actionId, payload, context) {
 function routeInvoiceAction_(actionId, payload, context) {
   if (actionId === "invoice_start") {
     handleInvoiceStart_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "invoice_line_continue") {
+    handleInvoiceLineContinue_(
+      context.channelId,
+      context.messageTs,
+      context.userId
+    );
+    return true;
+  }
+
+  if (actionId === "invoice_cancel_selected_assignment") {
+    handleInvoiceCancelSelectedAssignment_(
       context.channelId,
       context.messageTs,
       context.userId

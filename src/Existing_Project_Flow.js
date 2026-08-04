@@ -166,6 +166,7 @@ function handleExistingProjectContractorsSelect_(payload) {
 
   session.roleDrafts =
     projectRoles.map(role => ({
+      taskId: role.taskId,
       roleName: role.role,
       hoursToContractor: role.hoursToContractor,
       deliverables: role.deliverables || ""
@@ -318,22 +319,7 @@ function loadProjectsNeedingRoles_() {
   const projectRows =
     queryAllDataSourceRows_(PROJECTS_OVERVIEW_DATA_SOURCE_ID);
 
-  const taskRows =
-    queryAllDataSourceRows_(TASKS_DATA_SOURCE_ID);
-
-  const projectsWithRoles = {};
-
-  taskRows.forEach(row => {
-    const projectIds =
-      getRelationIds_(row.properties["Project"]);
-
-    projectIds.forEach(projectId => {
-      projectsWithRoles[projectId] = true;
-    });
-  });
-
   return projectRows
-    .filter(row => !projectsWithRoles[row.id])
     .map(row => ({
       id: row.id,
       name:
@@ -344,9 +330,23 @@ function loadProjectsNeedingRoles_() {
     }))
     .filter(project =>
       project.name &&
-      isProjectAvailableForAdminWork_(project.status)
+      isProjectAvailableForRoleCreation_(project.status)
     )
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function isProjectAvailableForRoleCreation_(status) {
+  const normalizedStatus =
+    String(status || "")
+      .trim()
+      .toLowerCase();
+
+  return [
+    "quotation",
+    "not started",
+    "internal",
+    "in progress"
+  ].includes(normalizedStatus);
 }
 
 function loadProjectsReadyForContractors_() {
@@ -356,7 +356,10 @@ function loadProjectsReadyForContractors_() {
   const taskRows =
     queryAllDataSourceRows_(TASKS_DATA_SOURCE_ID);
 
-  const projectIdsWithContractorHours = {};
+  const assignedTaskIdsByProject =
+    buildAssignedTaskRoleIdsByProject_();
+
+  const projectIdsWithAssignableRoles = {};
 
   taskRows.forEach(row => {
     const hoursToContractor =
@@ -370,12 +373,17 @@ function loadProjectsReadyForContractors_() {
       getRelationIds_(row.properties["Project"]);
 
     projectIds.forEach(projectId => {
-      projectIdsWithContractorHours[projectId] = true;
+      const assignedTaskIds =
+        assignedTaskIdsByProject[projectId] || [];
+
+      if (!assignedTaskIds.includes(row.id)) {
+        projectIdsWithAssignableRoles[projectId] = true;
+      }
     });
   });
 
   return projectRows
-    .filter(row => projectIdsWithContractorHours[row.id])
+    .filter(row => projectIdsWithAssignableRoles[row.id])
     .map(row => ({
       id: row.id,
       name:
@@ -386,9 +394,42 @@ function loadProjectsReadyForContractors_() {
     }))
     .filter(project =>
       project.name &&
-      isProjectAvailableForAdminWork_(project.status)
+      isProjectAvailableForRoleCreation_(project.status)
     )
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function buildAssignedTaskRoleIdsByProject_() {
+  const rows =
+    queryAllDataSourceRows_(PROJECT_BY_CONTRACTOR_DATA_SOURCE_ID);
+
+  const assignedByProject = {};
+
+  rows.forEach(row => {
+    const p = row.properties;
+
+    const projectId =
+      p["Projects 1 related to"]?.relation?.[0]?.id || "";
+
+    if (!projectId) {
+      return;
+    }
+
+    const taskIds =
+      getRelationIds_(p["Task / Role"]);
+
+    if (!assignedByProject[projectId]) {
+      assignedByProject[projectId] = [];
+    }
+
+    taskIds.forEach(taskId => {
+      if (taskId && !assignedByProject[projectId].includes(taskId)) {
+        assignedByProject[projectId].push(taskId);
+      }
+    });
+  });
+
+  return assignedByProject;
 }
 
 function isProjectAvailableForAdminWork_(status) {
