@@ -871,12 +871,15 @@ function finalizeSowsForProject_(projectId) {
         "yyyy"
       );
 
+      const signatureCode =
+        buildSignatureTrackingCode_(group.assignmentIds);
+
       const pdfFileName = sowSafeFileName_(
-        `${year} - ${group.projectName} - ${group.contractorName} - Attachment A - Statement of Work (SOW).pdf`
+        `${signatureCode} - ${year} - ${group.projectName} - ${group.contractorName} - Attachment A - Statement of Work (SOW).pdf`
       );
 
       const notionFileName = sowSafeFileName_(
-        `SOW - Pending Signature.pdf`
+        `${signatureCode} - SOW - Pending Signature.pdf`
       );
 
       const pdfFile = finalizeContractorSowPdf_(
@@ -1097,6 +1100,40 @@ function sowSafeFileName_(name) {
     .replace(/[\\/:*?"<>|]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function buildSignatureTrackingCode_(assignmentIds) {
+  const firstAssignmentId =
+    (assignmentIds || [])[0] || Utilities.getUuid();
+
+  const cleanId =
+    String(firstAssignmentId)
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .toUpperCase();
+
+  return (
+    "SIG-" +
+    cleanId.substring(Math.max(0, cleanId.length - 12))
+  );
+}
+
+function extractSignatureTrackingCode_(text) {
+  const match =
+    String(text || "").match(/SIG-[A-Z0-9]{8}/i);
+
+  return match
+    ? match[0].toUpperCase()
+    : "";
+}
+
+function getSignatureTrackingCodeForItem_(item) {
+  return (
+    item.signatureCode ||
+    extractSignatureTrackingCode_(item.pendingFileName) ||
+    extractSignatureTrackingCode_(item.helloSignFileName) ||
+    extractSignatureTrackingCode_(item.signedFileName) ||
+    buildSignatureTrackingCode_(item.assignmentIds)
+  );
 }
 
 function sowHasExistingFile_(property) {

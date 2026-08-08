@@ -102,15 +102,24 @@ function scanHelloSignRequestedSignatures_() {
       return;
     }
 
+    const documentType =
+      getSignatureDocumentTypeFromTitle_(
+        match.file.name || item.pendingFileName
+      );
+
+    const signatureCode =
+      getSignatureTrackingCodeForItem_({
+        ...item,
+        helloSignFileName: match.file.name
+      });
+
     if (match.status === "awaiting") {
       result.awaitingSignature.push({
         ...item,
+        signatureCode,
         helloSignFileName: match.file.name,
         helloSignFileUrl: match.file.url,
-        documentType:
-          getSignatureDocumentTypeFromTitle_(
-            match.file.name || item.pendingFileName
-          )
+        documentType
       });
       return;
     }
@@ -118,13 +127,16 @@ function scanHelloSignRequestedSignatures_() {
     if (match.status === "signed") {
       const signedFile = copyHelloSignSignedSowToOfficialFolder_(
         match.file,
-        item
+        {
+          ...item,
+          signatureCode
+        }
       );
 
       updateSowContractorFileForAssignments_(
         item.assignmentIds,
         {
-          name: `${documentType} - Signed.pdf`,
+          name: `${signatureCode} - ${documentType} - Signed.pdf`,
           url: signedFile.url
         }
       );
@@ -133,12 +145,10 @@ function scanHelloSignRequestedSignatures_() {
 
       result.signed.push({
         ...item,
+        signatureCode,
         signedFileName: signedFile.name,
         signedFileUrl: signedFile.url,
-        documentType:
-          getSignatureDocumentTypeFromTitle_(
-            match.file.name || item.pendingFileName
-          )
+        documentType
       });
     }
   });
@@ -211,13 +221,19 @@ function loadPendingSignatureSows_() {
       extractGoogleDriveFileId_(signatureFile.url) ||
       row.id;
 
+    const signatureCode =
+      extractSignatureTrackingCode_(signatureFile.name) ||
+      buildSignatureTrackingCode_([row.id]);
+
     const key =
+      signatureCode ||
       `${projectId.substring(0, 8)}_${contractorName.substring(0, 20)}_${fileId.substring(0, 12)}`
         .replace(/[^a-zA-Z0-9_-]/g, "");
 
     if (!groups[key]) {
       groups[key] = {
         key,
+        signatureCode,
         projectId,
         projectName: project.name || "Project",
         contractorName,
@@ -255,6 +271,29 @@ function loadPendingSignatureSows_() {
  ************************************/
 
 function findHelloSignMatchForSow_(pendingItem, helloSignFiles) {
+  const signatureCode =
+    normalizeSowMatchText_(
+      getSignatureTrackingCodeForItem_(pendingItem)
+    );
+
+  if (signatureCode) {
+    const codeCandidates = helloSignFiles
+      .map(file => ({
+        file,
+        normalizedName: normalizeSowMatchText_(file.name)
+      }))
+      .filter(item =>
+        item.normalizedName.indexOf(signatureCode) !== -1
+      );
+
+    const codeMatch =
+      getBestHelloSignMatch_(codeCandidates);
+
+    if (codeMatch) {
+      return codeMatch;
+    }
+  }
+
   const projectKey = normalizeSowMatchText_(pendingItem.projectName);
   const contractorKey = normalizeSowMatchText_(pendingItem.contractorName);
 
@@ -268,6 +307,10 @@ function findHelloSignMatchForSow_(pendingItem, helloSignFiles) {
       item.normalizedName.indexOf(contractorKey) !== -1
     );
 
+  return getBestHelloSignMatch_(candidates);
+}
+
+function getBestHelloSignMatch_(candidates) {
   if (!candidates.length) {
     return null;
   }
@@ -353,8 +396,14 @@ function copyHelloSignSignedSowToOfficialFolder_(helloSignFile, item) {
       helloSignFile.name || item.pendingFileName
     );
 
+  const signatureCode =
+    getSignatureTrackingCodeForItem_({
+      ...item,
+      helloSignFileName: helloSignFile.name
+    });
+
   const signedFileName = sowSafeFileName_(
-    `Signed ${documentType} - ${item.projectName} - ${item.contractorName}.pdf`
+    `${signatureCode} - Signed ${documentType} - ${item.projectName} - ${item.contractorName}.pdf`
   );
 
   const copiedFile = sourceFile.makeCopy(

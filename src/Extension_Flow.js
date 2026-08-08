@@ -1482,12 +1482,16 @@ function handleExtensionFinalizeAmendment_(
     return;
   }
 
+  const signatureCode =
+    buildSignatureTrackingCode_([data.assignmentId]);
+
   const pdfFile =
     finalizeContractorAmendmentPdf_(
       draftFile.id,
       data.projectName,
       data.contractorName,
-      data.role
+      data.role,
+      signatureCode
     );
 
   updateExtensionRequestAmendmentFile_(
@@ -1498,7 +1502,8 @@ function handleExtensionFinalizeAmendment_(
   updateSowContractorFileForAssignments_(
     [data.assignmentId],
     pdfFile.name,
-    pdfFile.url
+    pdfFile.url,
+    `${signatureCode} - Amendment - Pending Signature.pdf`
   );
 
   trashDriveFileById_(draftFile.id);
@@ -1568,7 +1573,8 @@ function finalizeContractorAmendmentPdf_(
     draftDocId,
     projectName,
     contractorName,
-    role
+    role,
+    signatureCode
   ) {
   const folder =
     DriveApp.getFolderById(CONTRACTOR_SOW_FOLDER_ID);
@@ -1576,9 +1582,12 @@ function finalizeContractorAmendmentPdf_(
   const draftFile =
     DriveApp.getFileById(draftDocId);
 
+  const code =
+    signatureCode || buildSignatureTrackingCode_([]);
+
   const pdfFileName =
     extensionSafeFileName_(
-      `Amendment - Pending Signature - ${projectName} - ${contractorName} - ${role}.pdf`
+      `${code} - Amendment - Pending Signature - ${projectName} - ${contractorName} - ${role}.pdf`
     );
 
   const pdfBlob =
