@@ -21,6 +21,13 @@
  ************************************/
 
 function runScheduledSowSignatureFolderScan() {
+  if (!isWeekdayInPortland_()) {
+    return {
+      skipped: true,
+      reason: "Weekend"
+    };
+  }
+
   const result = scanHelloSignRequestedSignatures_();
 
   if (!isSowSignatureNotificationHours_()) {
@@ -46,6 +53,19 @@ function runScheduledSowSignatureFolderScan() {
   }
 
   return result;
+}
+
+function isWeekdayInPortland_() {
+  const day =
+    Number(
+      Utilities.formatDate(
+        new Date(),
+        "America/Los_Angeles",
+        "u"
+      )
+    );
+
+  return day >= 1 && day <= 5;
 }
 
 function setupSowSignatureScanTrigger() {
