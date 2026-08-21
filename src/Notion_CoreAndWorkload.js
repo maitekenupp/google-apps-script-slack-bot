@@ -152,27 +152,56 @@ function getText_(property) {
 }
 
 function getNumber_(property) {
-  if (!property) return 0;
+  if (!property) {
+    return 0;
+  }
 
   if (property.type === "number") {
-    return property.number || 0;
+    return Number(property.number || 0);
   }
 
-  if (
-    property.type === "formula" &&
-    property.formula.type === "number"
-  ) {
-    return property.formula.number || 0;
+  if (property.type === "formula") {
+    if (property.formula.type === "number") {
+      return Number(property.formula.number || 0);
+    }
+
+    if (property.formula.type === "string") {
+      return parseNumberFromText_(property.formula.string);
+    }
   }
 
-  if (
-    property.type === "rollup" &&
-    property.rollup.type === "number"
-  ) {
-    return property.rollup.number || 0;
+  if (property.type === "rollup") {
+    if (property.rollup.type === "number") {
+      return Number(property.rollup.number || 0);
+    }
+
+    if (property.rollup.type === "array") {
+      return (property.rollup.array || []).reduce((sum, item) => {
+        return sum + getNumber_(item);
+      }, 0);
+    }
+  }
+
+  if (property.type === "rich_text") {
+    return parseNumberFromText_(
+      getText_(property)
+    );
   }
 
   return 0;
+}
+
+function parseNumberFromText_(value) {
+  const clean =
+    String(value || "")
+      .replace(/[^0-9.-]/g, "");
+
+  const number =
+    Number(clean);
+
+  return isNaN(number)
+    ? 0
+    : number;
 }
 
 function getMultiSelectNames_(property) {
@@ -271,11 +300,18 @@ function buildPortfolioProjects_() {
     const remainingHours =
       roundHours_(contractedHours - billedTotal);
 
+    const pendingToPay =
+      getNumber_(p["Pending to Pay"]);
+
     if (!projects[projectId]) {
       projects[projectId] = {
         projectId: project.id,
         projectName: project.name,
         projectStatus: project.status,
+        clientPrice: project.clientPrice,
+        liveCost: 0,
+        budgetRemainingAmount: project.clientPrice,
+        budgetRemainingPercent: 0,
         startDate: project.startDate,
         endDate: project.endDate,
         hasSowFile: project.hasSowFile,
@@ -294,11 +330,13 @@ function buildPortfolioProjects_() {
     projects[projectId].totalHours += contractedHours;
     projects[projectId].totalBilled += billedTotal;
     projects[projectId].totalRemaining += remainingHours;
+    projects[projectId].liveCost += pendingToPay;
 
     projects[projectId].team.push({
       contractor,
       role,
       hours: roundHours_(contractedHours),
+      pendingToPay,
       billedHistorical,
       billedCurrent,
       billed: billedTotal,
@@ -318,6 +356,17 @@ function buildPortfolioProjects_() {
 
     project.totalRemaining =
       roundHours_(project.totalRemaining);
+
+    project.liveCost =
+      roundHours_(project.liveCost);
+
+    project.budgetRemainingAmount =
+      roundHours_(project.clientPrice - project.liveCost);
+
+    project.budgetRemainingPercent =
+      project.clientPrice > 0
+        ? project.budgetRemainingAmount / project.clientPrice
+        : 0;
 
     project.usage =
       project.totalHours > 0
@@ -356,12 +405,29 @@ function loadPortfolioProjectsById_() {
         p["Project Start Date"]?.date?.start || "",
       endDate:
         p["Project End Date"]?.date?.start || "",
+      clientPrice:
+        getNumber_(p["Client Price"]),
       hasSowFile:
         Boolean(p["SOW File"]?.files?.length)
     };
   });
 
   return projects;
+}
+
+function normalizePortfolioPercent_(value) {
+  const number =
+    Number(value || 0);
+
+  if (!number) {
+    return 0;
+  }
+
+  // Notion percentage fields usually return 0.95 for 95%.
+  // This also supports formulas that return 95 instead.
+  return number > 1
+    ? number / 100
+    : number;
 }
 
 

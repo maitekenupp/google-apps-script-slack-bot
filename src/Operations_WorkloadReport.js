@@ -178,6 +178,17 @@ function buildPortfolioProjectSummaryText_(project) {
   const endDateText =
     project.endDateDisplay || "No end date";
 
+  const priceText =
+    formatPortfolioMoney_(project.clientPrice);
+
+  const remainingBudgetText =
+    formatPortfolioMoney_(project.budgetRemainingAmount);
+
+  const remainingPercentText =
+    project.clientPrice > 0
+      ? `${(project.budgetRemainingPercent * 100).toFixed(1)}%`
+      : "-";
+
   const riskText =
     project.risks && project.risks.length
       ? `\nRisk: ${project.risks.join(", ")}`
@@ -185,9 +196,11 @@ function buildPortfolioProjectSummaryText_(project) {
 
   return (
     `*${project.projectName}*\n` +
-    `${project.projectStatus} | Ends ${endDateText} | ` +
+    `${project.projectStatus} | ` +
+    `Ends ${endDateText} | ` +
     `${project.usage.toFixed(1)}% used | ` +
-    `${project.totalRemaining} hrs left` +
+    `${project.totalRemaining} hrs left\n` +
+    `Client Price: ${priceText} | ${remainingBudgetText} Left (${remainingPercentText})` +
     riskText
   );
 }
@@ -318,6 +331,7 @@ function buildPortfolioProjectDetailsModalView_(project) {
             `*${project.projectName}*\n\n` +
             `*Status:* ${project.projectStatus}\n` +
             `*Dates:* ${project.startDateDisplay || "-"} - ${project.endDateDisplay || "-"}\n` +
+            `*Client Price:* ${formatPortfolioMoney_(project.clientPrice)} | ${formatPortfolioMoney_(project.budgetRemainingAmount)} Left\n` +
             `*Usage:* ${project.usage.toFixed(1)}%\n` +
             `*Hours:* ${project.totalBilled}/${project.totalHours} used\n` +
             `*Remaining:* ${project.totalRemaining} hrs`
@@ -349,4 +363,18 @@ function buildPortfolioProjectDetailsModalView_(project) {
       }
     ]
   };
+}
+
+function formatPortfolioMoney_(value) {
+  const amount =
+    Number(value || 0);
+
+  if (!amount) {
+    return "-";
+  }
+
+  return "$" + amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 }
